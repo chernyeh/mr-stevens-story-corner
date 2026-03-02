@@ -281,7 +281,7 @@
 
 <script>
   // ── KEYS ──────────────────────────────────────────────────────────────────
-  var ANTHROPIC_KEY  = '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';
+  var ANTHROPIC_KEY  = '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';
   var GOOGLE_TTS_KEY = 'AIzaSyBzs3xuCmmsTHDX9pCj05STWuHGBFE5Aow';
 
   // ── STATE ─────────────────────────────────────────────────────────────────
@@ -891,18 +891,28 @@
     var isFrench  = (languageCode === 'fr-FR' || languageCode === 'fr-CA');
 
     // ── SSML helpers ────────────────────────────────────────────────────────
+    var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
+
     function escXml(s) {
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
     }
 
     // Build SSML for the title chunk - slow, warm, deliberate
     function titleSsml(title) {
+      if (isJourney) {
+        // Journey voices: only breaks supported, no prosody/emphasis
+        return '<speak>'
+          + '<break time="600ms"/>'
+          + escXml(title)
+          + '<break time="900ms"/>'
+          + '</speak>';
+      }
       var rate = isChinese ? '85%' : '82%';
       var pitch = isChinese ? '0st' : '+0.5st';
       return '<speak>'
         + '<break time="600ms"/>'
         + '<prosody rate="' + rate + '" pitch="' + pitch + '">'
-        + '<emphasis level="moderate">' + escXml(title) + '</emphasis>'
+        + escXml(title)
         + '</prosody>'
         + '<break time="900ms"/>'
         + '</speak>';
@@ -923,16 +933,19 @@
           }
         }
         return '<speak><prosody rate="90%" pitch="-0.5st">' + marked + '</prosody></speak>';
-      } else {
-        // English/French: add pauses at em-dashes and after sentence ends
+      } else if (isJourney) {
+        // Journey voices: only use break tags, no prosody/emphasis
         var s = escXml(para);
-        // em-dash -> pause
         s = s.replace(/\u2014/g, '<break time="350ms"/>');
-        // sentence endings -> breath pause
         s = s.replace(/([.!?])\s+/g, '$1<break time="400ms"/> ');
-        // comma pauses
         s = s.replace(/,\s+/g, ',<break time="180ms"/> ');
-        // dialogue opening quote - slight lift
+        return '<speak>' + s + '<break time="500ms"/></speak>';
+      } else {
+        // Neural2/Wavenet: full prosody support
+        var s = escXml(para);
+        s = s.replace(/\u2014/g, '<break time="350ms"/>');
+        s = s.replace(/([.!?])\s+/g, '$1<break time="400ms"/> ');
+        s = s.replace(/,\s+/g, ',<break time="180ms"/> ');
         s = s.replace(/\u201c([^"]*)\u201d/g,
           '<prosody pitch="+1.5st" rate="97%">\u201c$1\u201d</prosody>');
         var rate = isFrench ? '92%' : '90%';
