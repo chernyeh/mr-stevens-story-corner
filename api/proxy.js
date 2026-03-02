@@ -1,11 +1,20 @@
-export default async function handler(req, res) {
+export const config = { runtime: 'edge' };
+
+export default async function handler(req) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return new Response('Method not allowed', { status: 405 });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  const body = JSON.stringify(req.body);
+  if (!apiKey) {
+    return new Response(
+      JSON.stringify({ type: 'error', error: { message: 'No API key configured' } }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const body = await req.text();
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -17,6 +26,12 @@ export default async function handler(req, res) {
     body: body
   });
 
-  const data = await response.json();
-  res.status(response.status).json(data);
+  return new Response(response.body, {
+    status: response.status,
+    headers: {
+      'Content-Type': response.headers.get('Content-Type') || 'text/event-stream',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-cache'
+    }
+  });
 }
