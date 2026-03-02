@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mr Steven's Story Corner</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1a2e;
+    --parchment: #fdf6e3;
+    --gold: #e8a045;
+    --rose: #e8758a;
+    --sage: #7ab8a0;
+    --lavender: #a89bc2;
+    --cream: #fef9f0;
+    --shadow: rgba(26,26,46,0.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Nunito', sans-serif; background: var(--ink); min-height: 100vh; color: var(--ink); overflow-x: hidden; }
+  .stars {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1.5px 1.5px at 40% 10%, rgba(255,255,255,0.7) 0%, transparent 100%),
+      radial-gradient(1px 1px at 55% 30%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 70% 20%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1.5px 1.5px at 85% 45%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(1px 1px at 15% 70%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 60% 75%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1.5px 1.5px at 90% 80%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 35% 85%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  }
+  .app { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { text-align: center; margin-bottom: 48px; animation: fadeDown 0.8s ease; }
+  .logo-moon { font-size: 52px; display: block; margin-bottom: 8px; filter: drop-shadow(0 0 20px rgba(232,160,69,0.6)); animation: float 4s ease-in-out infinite; }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+  h1 { font-family: 'Playfair Display', serif; font-size: clamp(2rem,5vw,3rem); color: var(--parchment); letter-spacing: -0.5px; text-shadow: 0 0 40px rgba(232,160,69,0.3); }
+  h1 span { color: var(--gold); font-style: italic; }
+  .tagline { color: rgba(253,246,227,0.55); font-size: 0.95rem; margin-top: 8px; letter-spacing: 0.5px; }
+  .card { background: var(--cream); border-radius: 24px; padding: 36px; margin-bottom: 20px; box-shadow: 0 8px 40px var(--shadow),0 2px 8px rgba(0,0,0,0.1); animation: fadeUp 0.6s ease both; }
+  .card:nth-child(2){animation-delay:0.1s} .card:nth-child(3){animation-delay:0.2s} .card:nth-child(4){animation-delay:0.3s}
+  @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
+  .section-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; color: var(--ink); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .age-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .lang-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+  .lang-pill { padding: 10px 20px; border-radius: 50px; border: 2px solid transparent; background: white; cursor: pointer; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.88rem; color: #666; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.06); touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .lang-pill.selected { background: var(--lavender); color: white; border-color: var(--lavender); }
+  .age-pill { padding: 10px 18px; border-radius: 50px; border: 2px solid transparent; background: white; cursor: pointer; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.85rem; color: #666; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.06); touch-action: manipulation; -webkit-tap-highlight-color: transparent; appearance: none; }
+  .age-pill:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
+  .age-pill.selected { background: var(--ink); color: var(--gold); border-color: var(--ink); transform: translateY(-2px); box-shadow: 0 4px 14px rgba(26,26,46,0.25); }
+  .theme-input { width: 100%; padding: 14px 18px; border: 2px solid #e8e0d0; border-radius: 14px; font-family: 'Nunito',sans-serif; font-size: 1rem; color: var(--ink); background: white; transition: border-color 0.2s; outline: none; resize: none; }
+  .theme-input:focus { border-color: var(--gold); }
+  .theme-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .suggestion-chip { padding: 6px 14px; background: white; border: 1.5px solid #e8e0d0; border-radius: 50px; font-size: 0.8rem; font-weight: 600; color: #888; cursor: pointer; transition: all 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .suggestion-chip:hover { border-color: var(--rose); color: var(--rose); transform: translateY(-1px); }
+  .slider-container { padding: 8px 0; }
+  .slider-labels { display: flex; justify-content: space-between; font-size: 0.78rem; color: #aaa; font-weight: 600; margin-bottom: 10px; }
+  .length-display { text-align: center; font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
+  .length-display span { font-size: 1rem; color: #999; font-family: 'Nunito',sans-serif; }
+  input[type=range] { width: 100%; height: 6px; -webkit-appearance: none; background: linear-gradient(to right, var(--gold) 0%, var(--gold) var(--val,23%), #e0d8cc var(--val,23%), #e0d8cc 100%); border-radius: 10px; outline: none; cursor: pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; background: var(--ink); border-radius: 50%; border: 3px solid var(--gold); box-shadow: 0 2px 8px rgba(0,0,0,0.2); cursor: pointer; }
+  .voice-select { width: 100%; padding: 14px 18px; border: 2px solid #e8e0d0; border-radius: 14px; font-family: 'Nunito',sans-serif; font-size: 0.95rem; color: var(--ink); background: white; outline: none; cursor: pointer; transition: border-color 0.2s; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23aaa' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; padding-right: 40px; }
+  .voice-select:focus { border-color: var(--gold); }
+  .speed-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  .speed-label { font-size: 0.85rem; color: #888; font-weight: 600; white-space: nowrap; }
+  .speed-btns { display: flex; gap: 8px; }
+  .speed-btn { padding: 7px 14px; border-radius: 50px; border: 2px solid #e8e0d0; background: white; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.8rem; color: #888; cursor: pointer; transition: all 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .speed-btn.selected { background: var(--ink); color: var(--gold); border-color: var(--ink); }
+  .speed-btn:hover { transform: translateY(-1px); }
+  .voice-tip { margin-top: 12px; font-size: 0.8rem; color: #aaa; line-height: 1.6; }
+  .generate-btn { width: 100%; padding: 20px; background: linear-gradient(135deg,var(--ink) 0%,#2d2d5e 100%); color: var(--gold); border: none; border-radius: 18px; font-family: 'Playfair Display',serif; font-size: 1.3rem; font-weight: 700; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 8px 32px rgba(26,26,46,0.4); position: relative; overflow: hidden; animation: fadeUp 0.6s ease 0.4s both; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .generate-btn::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(232,160,69,0.15) 0%,transparent 60%); opacity:0; transition:opacity 0.3s; }
+  .generate-btn:hover::before{opacity:1} .generate-btn:hover{transform:translateY(-3px);box-shadow:0 12px 40px rgba(26,26,46,0.5)} .generate-btn:active{transform:translateY(0)} .generate-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+  .loading-card { background: var(--cream); border-radius: 24px; padding: 48px 36px; text-align: center; box-shadow: 0 8px 40px var(--shadow); display: none; }
+  .loading-card.visible { display: block; animation: fadeUp 0.4s ease; }
+  .loading-moons { display: flex; justify-content: center; gap: 10px; margin-bottom: 24px; }
+  .moon { width: 14px; height: 14px; background: var(--gold); border-radius: 50%; animation: bounce 1.2s ease-in-out infinite; }
+  .moon:nth-child(2){animation-delay:0.2s;background:var(--rose)} .moon:nth-child(3){animation-delay:0.4s;background:var(--lavender)}
+  @keyframes bounce { 0%,80%,100%{transform:scale(0.7);opacity:0.5} 40%{transform:scale(1.2);opacity:1} }
+  .loading-text { font-family: 'Playfair Display',serif; font-size: 1.3rem; color: var(--ink); margin-bottom: 8px; }
+  .loading-sub { color: #aaa; font-size: 0.9rem; }
+  .story-card { background: var(--parchment); border-radius: 24px; padding: 40px; box-shadow: 0 8px 40px var(--shadow); display: none; border: 1px solid rgba(232,160,69,0.2); }
+  .story-card.visible { display: block; animation: fadeUp 0.6s ease; }
+  .story-header { margin-bottom: 28px; }
+  .story-header h2 { font-family: 'Playfair Display',serif; font-size: 1.6rem; color: var(--ink); line-height: 1.3; }
+  .story-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .meta-tag { padding: 4px 12px; background: white; border-radius: 50px; font-size: 0.75rem; font-weight: 700; color: #888; border: 1.5px solid #e8e0d0; }
+  .story-text { font-family: 'Playfair Display',serif; font-size: 1.05rem; line-height: 1.9; color: #3a3228; margin-bottom: 32px; white-space: pre-wrap; }
+  .audio-player { background: var(--ink); border-radius: 18px; padding: 24px; color: white; }
+  .player-voice { font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-bottom: 8px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
+  .audio-status { font-size: 0.82rem; color: var(--gold); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .player-controls { display: flex; align-items: center; gap: 16px; }
+  .play-btn { width: 52px; height: 52px; background: var(--gold); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: all 0.2s; flex-shrink: 0; color: var(--ink); font-weight: bold; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .play-btn:hover { transform: scale(1.08); box-shadow: 0 4px 20px rgba(232,160,69,0.4); }
+  .stop-btn { width: 38px; height: 38px; background: rgba(255,255,255,0.1); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; transition: all 0.2s; flex-shrink: 0; color: white; }
+  .stop-btn:hover { background: rgba(255,255,255,0.2); }
+  .progress-area { flex: 1; }
+  .now-reading { font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-bottom: 8px; min-height: 1.2em; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .progress-bar-bg { height: 5px; background: rgba(255,255,255,0.15); border-radius: 10px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: var(--gold); border-radius: 10px; width: 0%; transition: width 0.4s linear; }
+  .new-story-btn { width: 100%; margin-top: 20px; padding: 14px; background: white; border: 2px solid #e8e0d0; border-radius: 14px; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--ink); cursor: pointer; transition: all 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .new-story-btn:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
+  .error-msg { background: #fff0f0; border: 1.5px solid #ffb3b3; border-radius: 12px; padding: 16px 20px; color: #c0392b; font-size: 0.9rem; margin-top: 16px; display: none; }
+  .error-msg.visible { display: block; animation: fadeUp 0.3s ease; }
+  /* Style picker */
+  .style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .style-card { padding: 16px 12px; background: white; border: 2px solid transparent; border-radius: 16px; cursor: pointer; text-align: center; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.05); touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .style-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+  .style-card.selected { border-color: var(--lavender); background: #f5f0fa; transform: translateY(-3px); box-shadow: 0 6px 20px rgba(168,155,194,0.25); }
+  .style-emoji { font-size: 1.8rem; margin-bottom: 8px; }
+  .style-label { font-weight: 700; font-size: 0.8rem; color: var(--ink); margin-bottom: 4px; line-height: 1.3; }
+  .style-desc { font-size: 0.7rem; color: #aaa; line-height: 1.4; }
+  .suggestion-chip.active { border-color: var(--gold); color: var(--gold); background: #fffbf0; }
+  .live-voice-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .live-voice-label { font-size: 0.78rem; color: rgba(255,255,255,0.5); font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; }
+  .live-voice-select { flex: 1; padding: 8px 12px; border-radius: 10px; border: 1.5px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: white; font-family: 'Nunito',sans-serif; font-size: 0.85rem; outline: none; cursor: pointer; appearance: none; }
+  .live-voice-select option { background: #1a1a2e; color: white; }
+  .live-voice-select:focus { border-color: var(--gold); }
+  .refresh-chip { border-color: var(--gold) !important; color: var(--gold) !important; }
+  .refresh-chip:hover { background: #fffbf0 !important; }
+  .time-labels { display: flex; justify-content: space-between; font-size: 0.72rem; color: rgba(255,255,255,0.35); margin-top: 5px; }
+
+  /* Story builder */
+  .optional-tag { font-size: 0.7rem; background: var(--lavender); color: white; padding: 2px 8px; border-radius: 20px; font-family: 'Nunito',sans-serif; font-weight: 700; vertical-align: middle; margin-left: 6px; }
+  .builder-section { margin-bottom: 20px; }
+  .builder-section:last-child { margin-bottom: 0; }
+  .builder-label { font-size: 0.85rem; font-weight: 700; color: #888; margin-bottom: 8px; }
+  .builder-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 8px; }
+  .builder-chip { padding: 6px 13px; background: white; border: 1.5px solid #e8e0d0; border-radius: 50px; font-size: 0.78rem; font-weight: 600; color: #888; cursor: pointer; transition: all 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .builder-chip:hover { border-color: var(--lavender); color: var(--lavender); }
+  .builder-chip.selected { background: var(--lavender); color: white; border-color: var(--lavender); }
+  .builder-input { width: 100%; padding: 10px 14px; border: 1.5px solid #e8e0d0; border-radius: 12px; font-family: 'Nunito',sans-serif; font-size: 0.88rem; color: var(--ink); background: white; outline: none; transition: border-color 0.2s; margin-top: 2px; }
+  .builder-input:focus { border-color: var(--lavender); }
+
+  /* Player settings panel */
+  .player-settings { margin-top: 18px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .player-setting-row { display: flex; align-items: center; gap: 10px; }
+  .player-setting-label { font-size: 0.78rem; color: rgba(255,255,255,0.5); font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; white-space: nowrap; min-width: 52px; }
+  .live-voice-select { flex: 1; padding: 8px 12px; border-radius: 10px; border: 1.5px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: white; font-family: 'Nunito',sans-serif; font-size: 0.85rem; outline: none; cursor: pointer; appearance: none; }
+  .live-voice-select option { background: #1a1a2e; color: white; }
+  .live-voice-select:focus { border-color: var(--gold); }
+  .speed-slider-wrap { flex: 1; display: flex; align-items: center; gap: 8px; }
+  .speed-tick { font-size: 0.72rem; color: rgba(255,255,255,0.35); white-space: nowrap; }
+  .speed-range { flex: 1; height: 4px; -webkit-appearance: none; background: rgba(255,255,255,0.2); border-radius: 10px; outline: none; cursor: pointer; }
+  .speed-range::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: var(--gold); border-radius: 50%; cursor: pointer; border: 2px solid rgba(255,255,255,0.3); }
+  .speed-value-label { font-size: 0.75rem; color: var(--gold); font-weight: 700; white-space: nowrap; min-width: 40px; text-align: right; }
+
+  @media(max-width:480px){.card{padding:24px 20px}.story-card{padding:28px 20px}.style-grid{grid-template-columns:repeat(2,1fr)}.player-setting-row{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div class="stars"></div>
+<div class="app">
+
+  <header>
+    <span class="logo-moon">🌙</span>
+    <h1>Mr Steven's<span> Story Corner</span></h1>
+    <p class="tagline">Magical stories, made just for your child ✨</p>
+  </header>
+
+  <div id="setupSection">
+
+    <div class="card">
+      <div class="section-title"><span>🎂</span> How old is your child?</div>
+      <div class="age-grid">
+        <button class="age-pill" data-age="3-4" onclick="selectAge(this)">3–4 years</button>
+        <button class="age-pill" data-age="5-6" onclick="selectAge(this)">5–6 years</button>
+        <button class="age-pill" data-age="7-9" onclick="selectAge(this)">7–9 years</button>
+        <button class="age-pill" data-age="10-11" onclick="selectAge(this)">10–11 years</button>
+        <button class="age-pill" data-age="12-14" onclick="selectAge(this)">12–14 years</button>
+      </div>
+    </div>
+
+    <div class="card" id="languageCard" style="display:none">
+      <div class="section-title"><span>🌍</span> Story language</div>
+      <div class="lang-grid">
+        <button class="lang-pill selected" data-lang="en" onclick="selectLang(this)">🇬🇧 English</button>
+        <button class="lang-pill" data-lang="fr" onclick="selectLang(this)">🇫🇷 French</button>
+        <button class="lang-pill" data-lang="zh" onclick="selectLang(this)">🇨🇳 Mandarin</button>
+      </div>
+      <p class="voice-tip" style="margin-top:10px">💡 The story choices are always in English. The story itself and its narration will be in the language you select.</p>
+    </div>
+    <div class="card" id="themeCard" style="display:none">
+      <div class="section-title"><span>✨</span> What's the story about?</div>
+      <textarea class="theme-input" id="themeInput" rows="2" oninput="if(selectedAge) renderBuilder()" placeholder="e.g. A little dragon who learns to share..."></textarea>
+      <div class="theme-suggestions" id="themeSuggestions"></div>
+    </div>
+    <div class="card" id="storyBuilderCard" style="display:none">
+      <div class="section-title"><span>🎲</span> Shape your story <span class="optional-tag">optional</span></div>
+
+      <div class="builder-section" id="characterSection">
+        <div class="builder-label">🧒 Main character</div>
+        <div class="builder-chips" id="characterChips"></div>
+        <input class="builder-input" id="characterInput" placeholder="Or describe your own character…">
+      </div>
+
+      <div class="builder-section">
+        <div class="builder-label">🌍 Setting</div>
+        <div class="builder-chips" id="settingChips"></div>
+        <input class="builder-input" id="settingInput" placeholder="Or describe your own setting…">
+      </div>
+
+      <div class="builder-section">
+        <div class="builder-label">⚡ Story twist</div>
+        <div class="builder-chips" id="twistChips"></div>
+        <input class="builder-input" id="twistInput" placeholder="Or add your own twist…">
+      </div>
+
+      <div class="builder-section">
+        <div class="builder-label">💫 How does it end?</div>
+        <div class="builder-chips" id="endingChips"></div>
+      </div>
+    </div>
+    <div class="card" id="styleCard" style="display:none">
+      <div class="section-title"><span>🖊️</span> Choose a writing style</div>
+      <div class="style-grid" id="styleGrid"></div>
+    </div>
+    <div class="card" id="lengthCard" style="display:none">
+      <div class="section-title"><span>⏱️</span> How long should the story be?</div>
+      <div class="slider-container">
+        <div class="length-display" id="lengthDisplay">5 <span>minutes</span></div>
+        <div class="slider-labels"><span>2 min</span><span>5 min</span><span>10 min</span><span>15 min</span></div>
+        <input type="range" id="lengthSlider" min="2" max="15" value="5">
+      </div>
+    </div>
+
+    <button class="generate-btn" id="generateBtn" style="display:none" onclick="generateStory()">🌙 Create My Story</button>
+    <div class="error-msg" id="errorMsg"></div>
+
+  </div>
+
+  <div class="loading-card" id="loadingCard">
+    <div class="loading-moons"><div class="moon"></div><div class="moon"></div><div class="moon"></div></div>
+    <div class="loading-text" id="loadingText">Starting your story…</div>
+    <div class="loading-sub" id="loadingSub">Words will appear in just a moment</div>
+  </div>
+
+  <div class="story-card" id="storyCard">
+    <div class="story-header">
+      <h2 id="storyTitle"></h2>
+      <div class="story-meta" id="storyMeta"></div>
+    </div>
+    <div class="story-text" id="storyText"></div>
+    <div class="audio-player">
+      <div class="audio-status" id="audioStatus" style="display:none"></div>
+
+      <div class="player-controls">
+        <button class="play-btn" id="playBtn" onclick="togglePlay()">&#x25b6;</button>
+        <button class="stop-btn" id="stopBtn" title="Stop" onclick="stopReading()">&#x25a0;</button>
+        <div class="progress-area">
+          <div class="now-reading" id="nowReading">Press play to begin narration</div>
+          <div class="progress-bar-bg" id="progressBg"><div class="progress-bar-fill" id="progressFill"></div></div>
+          <div class="time-labels"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
+        </div>
+      </div>
+
+      <div class="player-settings">
+        <div class="player-setting-row">
+          <span class="player-setting-label">🎙️ Voice</span>
+          <select class="live-voice-select" id="liveVoiceSelect"><option value="">Loading...</option></select>
+        </div>
+        <div class="player-setting-row">
+          <span class="player-setting-label">🐢 Speed</span>
+          <div class="speed-slider-wrap">
+            <span class="speed-tick">Slow</span>
+            <input type="range" id="speedSlider" min="0.6" max="1.4" step="0.05" value="0.95" class="speed-range">
+            <span class="speed-tick">Fast</span>
+          </div>
+          <span class="speed-value-label" id="speedValueLabel">Normal</span>
+        </div>
+      </div>
+      <p class="voice-tip" style="margin-top:12px">💡 Journey voices (Aurora, Elara, Marcus) are the most expressive for storytelling. Changing voice or speed will regenerate the audio.</p>
+    </div>
+    <button class="new-story-btn" id="newStoryBtn" onclick="newStory()">🌙 Create Another Story</button>
+  </div>
+
+<script>
+  // ── KEYS ──────────────────────────────────────────────────────────────────
+  var ANTHROPIC_KEY  = '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';
+  var GOOGLE_TTS_KEY = 'AIzaSyBzs3xuCmmsTHDX9pCj05STWuHGBFE5Aow';
+
+  // ── STATE ─────────────────────────────────────────────────────────────────
+  var selectedAge   = null;
+  var selectedStyle = null;
+  var selectedLang  = 'en';
+  var speechRate    = 0.95;
+  var fullStoryText = '';
+  var currentAudio  = null;
+  var builderSelections = { character: '', setting: '', twist: '', ending: '' };
+
+  // ── VOICES ────────────────────────────────────────────────────────────────
+  var VOICES = {
+    en: [
+      { id: 'en-GB-Journey-F', label: 'Elara',    desc: 'Rich British female',  lang: 'en-GB' },
+      { id: 'en-US-Journey-F', label: 'Aurora',   desc: 'Warm US female',       lang: 'en-US' },
+      { id: 'en-US-Neural2-F', label: 'Clara',    desc: 'Clear US female',      lang: 'en-US' },
+      { id: 'en-GB-Neural2-A', label: 'Olivia',   desc: 'Warm British female',  lang: 'en-GB' },
+      { id: 'en-AU-Neural2-A', label: 'Matilda',  desc: 'Australian female',    lang: 'en-AU' },
+      { id: 'en-US-Journey-D', label: 'Marcus',   desc: 'Deep warm US male',    lang: 'en-US' },
+      { id: 'en-US-Neural2-D', label: 'James',    desc: 'Clear US male',        lang: 'en-US' },
+      { id: 'en-GB-Neural2-B', label: 'Edmund',   desc: 'British male',         lang: 'en-GB' },
+      { id: 'en-AU-Neural2-B', label: 'Henry',    desc: 'Australian male',      lang: 'en-AU' }
+    ],
+    fr: [
+      { id: 'fr-FR-Journey-F', label: 'Camille',  desc: 'Voix Journey feminine',  lang: 'fr-FR' },
+      { id: 'fr-FR-Neural2-A', label: 'Isabelle', desc: 'Neural2 feminine',       lang: 'fr-FR' },
+      { id: 'fr-FR-Neural2-C', label: 'Margaux',  desc: 'Neural2 feminine douce', lang: 'fr-FR' },
+      { id: 'fr-FR-Journey-D', label: 'Antoine',  desc: 'Voix Journey masculine',  lang: 'fr-FR' },
+      { id: 'fr-FR-Neural2-B', label: 'Henri',    desc: 'Neural2 masculin',        lang: 'fr-FR' },
+      { id: 'fr-CA-Neural2-A', label: 'Amelie',   desc: 'Voix canadienne',         lang: 'fr-CA' }
+    ],
+    zh: [
+      { id: 'cmn-CN-Wavenet-A', label: 'Shen Hong', desc: 'WaveNet female, warm',  lang: 'cmn-CN' },
+      { id: 'cmn-CN-Wavenet-B', label: 'Zhiyuan',   desc: 'WaveNet male, rich',    lang: 'cmn-CN' },
+      { id: 'cmn-CN-Wavenet-D', label: 'Jianlin',   desc: 'WaveNet male, clear',   lang: 'cmn-CN' }
+    ]
+  };
+
+  // ── LANGUAGE CONFIG ───────────────────────────────────────────────────────
+  var LANG_CONFIG = {
+    en: {
+      name: 'English', defaultVoice: 'en-GB-Journey-F', defaultRate: 0.95,
+      promptInstruction: 'Write the entire story in English.',
+      narratorNote: 'Use commas for natural spoken pauses, em-dashes for dramatic pauses. End every sentence with a full stop, exclamation mark, or question mark. Start a new paragraph for each new moment or scene shift.'
+    },
+    fr: {
+      name: 'French', defaultVoice: 'fr-FR-Journey-F', defaultRate: 0.78,
+      promptInstruction: 'Write the entire story in French (fr-FR). All text including the title must be in French. IMPORTANT: This is for non-native French learners. Use simplified clear grammar: short sentences of max 12 words, common A2-B1 level vocabulary, avoid subjunctive, avoid complex tenses beyond passe compose and imparfait, avoid idiomatic expressions. Write so a learner can understand every sentence when read aloud slowly.',
+      narratorNote: 'Use commas for natural pauses, em-dashes for dramatic pauses. End every sentence clearly. New paragraph for each scene shift.'
+    },
+    zh: {
+      name: 'Mandarin Chinese', defaultVoice: 'cmn-CN-Wavenet-A', defaultRate: 0.78,
+      promptInstruction: 'Write the entire story in Mandarin Chinese using Simplified Chinese characters. All text including the title must be in Chinese. IMPORTANT: This is for non-native Mandarin learners. Use simplified clear language: short sentences of max 8 characters per clause, use only common HSK 1-3 vocabulary, avoid chengyu idioms, use simple subject-verb-object structure, no complex grammar patterns. Write so a learner can understand every sentence when read aloud slowly.',
+      narratorNote: 'Use Chinese commas for natural pauses. End every sentence with a Chinese period, exclamation or question mark. Start a new paragraph for each new moment or scene shift.'
+    }
+  };
+
+  // ── WRITING STYLES ────────────────────────────────────────────────────────
+  var STYLES = {
+    en: {
+      '3-4': [
+        { emoji: '🐻', label: 'Michael Rosen',   author: 'Michael Rosen',   text: 'Rhythmic and playful like Michael Rosen - short punchy lines, lots of repetition, sound words, and a joyful bouncy energy that begs to be read aloud' },
+        { emoji: '🌙', label: 'Julia Donaldson', author: 'Julia Donaldson', text: 'Rhyming and musical like Julia Donaldson - strong rhyming couplets, a repeating refrain, gentle suspense, and a warm reassuring ending' },
+        { emoji: '🐛', label: 'Eric Carle',      author: 'Eric Carle',      text: 'Simple and wonder-filled like Eric Carle - very short sentences, a gentle repetitive structure, a small creature discovering the world, and a satisfying transformation' }
+      ],
+      '5-6': [
+        { emoji: '🍫', label: 'Roald Dahl',       author: 'Roald Dahl',       text: 'Mischievous and vivid like Roald Dahl - a slightly naughty or magical premise, over-the-top descriptions, a child who outwits the adults, and a deliciously satisfying ending' },
+        { emoji: '🐯', label: 'A.A. Milne',       author: 'A.A. Milne',       text: 'Gentle and whimsical like A.A. Milne - a cosy world, endearing animal characters with distinct personalities, gentle humour, and a warm friendship at the heart of it' },
+        { emoji: '🧙', label: 'C.S. Lewis',       author: 'C.S. Lewis',       text: 'Adventurous and enchanting like C.S. Lewis - a child who stumbles into a magical world, a sense of awe and danger, and a story that feels genuinely important' },
+        { emoji: '🎩', label: 'Dr. Seuss',        author: 'Dr. Seuss',        text: 'Inventive and anarchic like Dr. Seuss - made-up words, wild rhymes, impossible situations played completely straight, celebrating imagination above all else' },
+        { emoji: '⭐', label: 'Claire A. Nivola', author: 'Claire A. Nivola', text: 'Spare and poetic like Claire A. Nivola - very simple lyrical sentences, a sense of wonder at the cycle of life, quiet emotion, and a story that feels timeless' }
+      ],
+      '7-9': [
+        { emoji: '⚡', label: 'J.K. Rowling',    author: 'J.K. Rowling',     text: 'Immersive and inventive like J.K. Rowling - a richly imagined world, a young protagonist discovering their identity, witty details, and a plot full of clever surprises' },
+        { emoji: '🍫', label: 'Roald Dahl',      author: 'Roald Dahl',       text: 'Darkly funny and subversive like Roald Dahl - a child in an absurd world, brilliant comic timing, vivid grotesque details, and a triumphant ending for the underdog' },
+        { emoji: '🕵', label: 'David Walliams',  author: 'David Walliams',   text: 'Warm-hearted and comedic like David Walliams - an unlikely hero, exaggerated comic villains, laugh-out-loud moments alongside genuine emotion' },
+        { emoji: '🌿', label: 'M. Morpurgo',     author: 'Michael Morpurgo', text: 'Lyrical and emotional like Michael Morpurgo - beautiful descriptive prose, a deep bond between a child and an animal or place, and bittersweet emotion' },
+        { emoji: '🗡', label: 'C.S. Lewis',      author: 'C.S. Lewis',       text: 'Epic and moral like C.S. Lewis - a grand adventure in a fully realised magical world, characters tested by courage and loyalty' }
+      ],
+      '10-11': [
+        { emoji: '⚡', label: 'J.K. Rowling',    author: 'J.K. Rowling',     text: 'Complex and layered like J.K. Rowling - intricate world-building, a protagonist navigating loyalty and identity, subplots that weave together, and high emotional stakes' },
+        { emoji: '💍', label: 'J.R.R. Tolkien',  author: 'J.R.R. Tolkien',   text: 'Sweeping and mythic like Tolkien - a vividly realised world, an epic quest, moments of great beauty and danger, and themes of courage and friendship' },
+        { emoji: '🌑', label: 'Philip Pullman',  author: 'Philip Pullman',   text: 'Ambitious and philosophical like Philip Pullman - a bold original world, a fiercely independent protagonist, and ideas about freedom woven into the adventure' },
+        { emoji: '🕵', label: 'A. Horowitz',     author: 'Anthony Horowitz', text: 'Pacey and clever like Anthony Horowitz - a resourceful young hero in real danger, tight plotting, and a thriller pace that never lets up' },
+        { emoji: '🌊', label: 'M. Morpurgo',     author: 'Michael Morpurgo', text: 'Moving and lyrical like Michael Morpurgo - luminous descriptive writing, a young person facing hardship with quiet courage, and emotional honesty' }
+      ],
+      '12-14': [
+        { emoji: '🧊', label: 'Hemingway',       author: 'Ernest Hemingway',       text: 'Spare and powerful like Hemingway - short declarative sentences, no wasted words, emotion conveyed through action and dialogue, subtext that says everything' },
+        { emoji: '🌀', label: 'Garcia Marquez',  author: 'Gabriel Garcia Marquez', text: 'Magical and sensory like Garcia Marquez - magical realism woven into everyday life, lush descriptions, and a dreamlike inevitability to events' },
+        { emoji: '🪶', label: 'Ishiguro',        author: 'Kazuo Ishiguro',         text: 'Quiet and haunting like Ishiguro - a gentle narrator who slowly reveals something devastating, restrained emotion, and themes of memory and loss' },
+        { emoji: '🌿', label: 'McCarthy',        author: 'Cormac McCarthy',        text: 'Raw and elemental like McCarthy - stripped-back prose, a harsh landscape mirroring the inner world, spare dialogue, and a story of survival and love' },
+        { emoji: '🗽', label: 'Toni Morrison',   author: 'Toni Morrison',          text: 'Lyrical and powerful like Toni Morrison - rich poetic prose, authentic voices, and themes of identity told with beauty and weight' },
+        { emoji: '🌙', label: 'Neil Gaiman',     author: 'Neil Gaiman',            text: 'Mythic and atmospheric like Neil Gaiman - a story that feels like a fairy tale, unsettling beauty, and prose that reads like music' }
+      ]
+    },
+    fr: {
+      '3-4': [
+        { emoji: '🐘', label: 'Jean de Brunhoff',  author: 'Jean de Brunhoff',         text: 'Chaleureux et aventureux comme Babar - un jeune heros qui decouvre le monde, des phrases simples et delicates, et un sentiment de securite' },
+        { emoji: '🌹', label: 'Saint-Exupery',     author: 'Antoine de Saint-Exupery', text: 'Poetique et contemplatif comme Saint-Exupery - un langage simple mais profond, des images belles et memorables, et une sagesse douce' },
+        { emoji: '🐺', label: 'Gilles Tibo',       author: 'Gilles Tibo',              text: 'Doux et imaginaire comme Gilles Tibo - des phrases courtes et rythmiques, un petit heros curieux, une atmosphere chaleureuse' }
+      ],
+      '5-6': [
+        { emoji: '🌹', label: 'Saint-Exupery',     author: 'Antoine de Saint-Exupery', text: 'Lyrique et philosophique comme Saint-Exupery - des idees profondes exprimees simplement, de la poesie dans chaque phrase' },
+        { emoji: '🎭', label: 'Marcel Pagnol',     author: 'Marcel Pagnol',            text: 'Chaud et evocateur comme Pagnol - des personnages colores et attachants, de l\'humour leger, et un sens profond de la famille' },
+        { emoji: '🦁', label: 'La Fontaine',       author: 'Jean de La Fontaine',      text: 'Spirituel et moral comme La Fontaine - des animaux qui representent des qualites humaines, un recit rhythme, et une morale claire' },
+        { emoji: '🚀', label: 'Rene Goscinny',     author: 'Rene Goscinny',            text: 'Plein d\'humour comme Goscinny - des personnages amusants, des situations absurdes, et beaucoup de chaleur humaine' }
+      ],
+      '7-9': [
+        { emoji: '🌹', label: 'Saint-Exupery',     author: 'Antoine de Saint-Exupery', text: 'Profond et imaginaire comme Saint-Exupery - un univers poignant, des dialogues memorables, et une beaute simple dans le langage' },
+        { emoji: '🎭', label: 'Marcel Pagnol',     author: 'Marcel Pagnol',            text: 'Riche et emotionnel comme Pagnol - une histoire ancree dans un lieu fort, des relations profondes, une narration humoristique et touchante' },
+        { emoji: '🚀', label: 'Jules Verne',       author: 'Jules Verne',              text: 'Aventureux et inventif comme Jules Verne - un voyage extraordinaire, un heros courageux, et une intrigue pleine de rebondissements' },
+        { emoji: '🧙', label: 'Alexandre Dumas',   author: 'Alexandre Dumas',          text: 'Dramatique et entrainant comme Dumas - un heros attachant dans des situations perilleuses, de la loyaute et du courage' }
+      ],
+      '10-11': [
+        { emoji: '🚀', label: 'Jules Verne',       author: 'Jules Verne',              text: 'Grandiose et visionnaire comme Jules Verne - une aventure epique, des idees audacieuses, et un sentiment de decouverte constant' },
+        { emoji: '⚔',  label: 'Alexandre Dumas',   author: 'Alexandre Dumas',          text: 'Romanesque et heroique comme Dumas - un heros noble, des antagonistes memorables, des retournements dramatiques' },
+        { emoji: '🕵', label: 'Conan Doyle',       author: 'Arthur Conan Doyle',       text: 'Logique et fascinant comme Conan Doyle - une enquete minutieuse, un detective brillant, et une resolution satisfaisante' },
+        { emoji: '🌿', label: 'George Sand',       author: 'George Sand',              text: 'Lyrique et humaniste comme George Sand - une nature decrite avec poesie et des personnages profondement humains' }
+      ],
+      '12-14': [
+        { emoji: '🌹', label: 'Saint-Exupery',      author: 'Antoine de Saint-Exupery', text: 'Meditatif et universel comme Saint-Exupery - une prose poetique, des symboles puissants, et une quete de sens profonde' },
+        { emoji: '🎭', label: 'Albert Camus',       author: 'Albert Camus',             text: 'Clair et philosophique comme Camus - des phrases directes et precises, et des themes existentiels traites avec humilite' },
+        { emoji: '🌿', label: 'Simone de Beauvoir', author: 'Simone de Beauvoir',       text: 'Perspicace et emotionnel - une voix interieure forte, une exploration de l\'identite et de la liberte' },
+        { emoji: '🌀', label: 'Gustave Flaubert',   author: 'Gustave Flaubert',         text: 'Precis et sensoriel comme Flaubert - chaque detail soigneusement choisi et une narration irreprochable' },
+        { emoji: '🌙', label: 'Marcel Proust',      author: 'Marcel Proust',            text: 'Introspectif et sensuel comme Proust - des phrases longues qui capturent la memoire et le temps, et une emotion profonde' }
+      ]
+    },
+    zh: {
+      '3-4': [
+        { emoji: '🐼', label: 'Lin Liangshi',  author: 'Lin Liangshi',  text: 'Warm and playful like Lin Liangshi picture books - simple joyful stories, rich imagination, loveable animal characters, and a warm happy ending' },
+        { emoji: '🐉', label: 'Zheng Yuanjie', author: 'Zheng Yuanjie', text: 'Fantastical and lively like Zheng Yuanjie - a whimsical world, quirky loveable heroes, and simple stories full of laughter and small surprises' },
+        { emoji: '🌸', label: 'Bing Xin',      author: 'Bing Xin',      text: 'Delicate and tender like Bing Xin - short beautiful sentences, small stories children can feel deeply, full of love and warmth' }
+      ],
+      '5-6': [
+        { emoji: '🐉', label: 'Zheng Yuanjie', author: 'Zheng Yuanjie', text: 'Fantastical and adventurous like Zheng Yuanjie - a magical world, a small hero who overcomes obstacles, full of warmth and delightful surprises' },
+        { emoji: '🌸', label: 'Bing Xin',      author: 'Bing Xin',      text: 'Warm and poetic like Bing Xin - fresh flowing language, love of nature, deep feeling for children and mothers, a gentle and loving ending' },
+        { emoji: '🦁', label: 'Shen Shixi',    author: 'Shen Shixi',    text: 'Vivid and moving like Shen Shixi animal stories - a vibrant animal hero, rich natural landscapes, and a captivating adventure full of heart' },
+        { emoji: '🔬', label: 'Ye Yonglie',    author: 'Ye Yonglie',    text: 'Magical science-fantasy like Ye Yonglie - simple bold scientific ideas, a curious young hero, and a story full of wonder and invention' }
+      ],
+      '7-9': [
+        { emoji: '🦁', label: 'Shen Shixi',    author: 'Shen Shixi',    text: 'Epic and moving like Shen Shixi - a vibrant animal protagonist, rich natural settings, and an emotional story that stays with you' },
+        { emoji: '🌿', label: 'Lu Xun',        author: 'Lu Xun',        text: 'Sharp and insightful like Lu Xun - crisp powerful sentences, small everyday moments observed with great clarity, and deep understanding of life' },
+        { emoji: '🎭', label: 'Cao Wenxuan',   author: 'Cao Wenxuan',   text: 'Warm and deeply felt like Cao Wenxuan - poetic language, a child protagonist facing life with courage, and a lyrical understanding of childhood' },
+        { emoji: '🔬', label: 'Ye Yonglie',    author: 'Ye Yonglie',    text: 'Bright and imaginative like Ye Yonglie science fiction - bold ideas, a clever young protagonist, and a plot full of invention and wonder' }
+      ],
+      '10-11': [
+        { emoji: '🎭', label: 'Cao Wenxuan',   author: 'Cao Wenxuan',      text: 'Profound and beautiful like Cao Wenxuan - poetic language, the drama of childhood life, deep emotion, and a tender understanding of growing up' },
+        { emoji: '⚔',  label: 'Jin Yong',      author: 'Jin Yong',         text: 'Grand and heroic like Jin Yong - sweeping adventure, chivalrous characters, exciting battles full of skill and honour' },
+        { emoji: '🌙', label: 'Chinese Myths', author: 'Chinese Mythology', text: 'Wondrous and colourful like Chinese mythology - rich mythological elements, a fantastical world, and a journey full of justice and courage' },
+        { emoji: '🌊', label: 'Qiong Yao',     author: 'Qiong Yao',        text: 'Emotionally rich like Qiong Yao - vivid characters with deep feeling, unforgettable personalities, and a deeply moving conclusion' }
+      ],
+      '12-14': [
+        { emoji: '🌿', label: 'Lu Xun',        author: 'Lu Xun',       text: 'Cold and incisive like Lu Xun - short sharp sentences, piercing observation of society, deep metaphor, and a penetrating analysis of human nature' },
+        { emoji: '🌸', label: 'Zhang Ailing',  author: 'Zhang Ailing', text: 'Vivid and far-reaching like Zhang Ailing - striking language, precise exploration of human nature, and a dark atmospheric tension' },
+        { emoji: '🎭', label: 'Cao Wenxuan',   author: 'Cao Wenxuan',  text: 'Poetic and painterly like Cao Wenxuan - lyrical moving prose, the deep emotions of childhood, and a searching exploration of the world' },
+        { emoji: '⚔',  label: 'Jin Yong',      author: 'Jin Yong',     text: 'Mature and richly layered like Jin Yong - deep martial philosophy, honour and betrayal, and an epic historical sweep' },
+        { emoji: '🌊', label: 'Ping Fanzi',    author: 'Ping Fanzi',   text: 'Melancholic and beautiful like Ping Fanzi - flowing lyrical prose, rich emotional truth, and a poetic portrait of ordinary life' }
+      ]
+    }
+  };
+
+  // ── THEMES ────────────────────────────────────────────────────────────────
+  var THEMES = {
+    '3-4': [
+      { emoji: '🐻', label: 'Sleepy Bear',   text: 'A little bear who cannot fall asleep and goes on a dreamy bedtime adventure' },
+      { emoji: '🌈', label: 'Rainbow Day',   text: 'A tiny cloud who learns to make rainbows after a rainy day' },
+      { emoji: '🐣', label: 'Brave Chick',   text: 'A baby chick who takes their very first steps outside the nest' },
+      { emoji: '🌻', label: 'Magic Garden',  text: 'A seed that grows into a magical flower with a surprise inside' },
+      { emoji: '🍪', label: 'Cookie Hunt',   text: 'A child and their puppy who follow a trail of crumbs through the house' },
+      { emoji: '🌙', label: 'Moon Visit',    text: 'A child who floats up to the moon on a big bubble and meets the man in the moon' },
+      { emoji: '🐠', label: 'Fishy Friend',  text: 'A little fish scared of the big ocean until a friendly starfish shows them around' },
+      { emoji: '🌧', label: 'Puddle Day',    text: 'A child who discovers that every puddle leads to a tiny world underneath' },
+      { emoji: '🐛', label: 'Big Change',    text: 'A caterpillar nervous about becoming a butterfly who learns to embrace change' },
+      { emoji: '🧸', label: 'Lost Teddy',    text: 'A child who goes on a house adventure to find their missing teddy before bedtime' },
+      { emoji: '🍄', label: 'Mushroom Home', text: 'A tiny mouse who builds a cosy home inside a mushroom and makes it magical' },
+      { emoji: '⭐', label: 'Falling Star',  text: 'A star that falls from the sky and needs a child to help it find its way back home' }
+    ],
+    '5-6': [
+      { emoji: '🐉', label: 'Tiny Dragon',   text: 'A friendly dragon who is afraid of fire and has to find their own special power' },
+      { emoji: '🧚', label: 'Lost Fairy',    text: 'A fairy who loses her wings and must ask forest animals for help to get them back' },
+      { emoji: '🚀', label: 'Space Day',     text: 'A child who accidentally launches into space in a cardboard rocket and visits friendly aliens' },
+      { emoji: '👑', label: 'Kind Princess', text: 'A princess who uses kindness instead of magic to solve the kingdom problems' },
+      { emoji: '🐬', label: 'Ocean Friend',  text: 'A child who can breathe underwater and befriends a lonely dolphin' },
+      { emoji: '🌟', label: 'Wishing Star',  text: 'A fallen star who needs a child to help find the way back to the sky' },
+      { emoji: '🦊', label: 'Sneaky Fox',    text: 'A fox who keeps playing tricks until the day a trick goes wrong and teaches honesty' },
+      { emoji: '🎪', label: 'Magic Circus',  text: 'A child who sneaks into a magical circus after dark and discovers the animals can talk' },
+      { emoji: '🌍', label: 'Tiny Explorer', text: 'A child who shrinks to the size of an ant and must find their way home through the garden' },
+      { emoji: '🧙', label: 'Young Wizard',  text: 'A young wizard whose first spell goes hilariously wrong and affects the whole village' },
+      { emoji: '🐧', label: 'Penguin Trip',  text: 'A penguin who gets lost on a warm island and must make new friends to find the way home' },
+      { emoji: '🎵', label: 'Magic Song',    text: 'A child who discovers that whenever they sing, things around them come to life' }
+    ],
+    '7-9': [
+      { emoji: '🗺', label: 'Secret Map',    text: 'Two friends who discover an old map leading to a hidden treasure in their town' },
+      { emoji: '🤖', label: 'Robot Friend',  text: 'A lonely robot who escapes from a science lab and learns what it means to be human' },
+      { emoji: '🦁', label: 'Wild Side',     text: 'A shy child who discovers they can talk to animals and must help save a local forest' },
+      { emoji: '⚡', label: 'Storm Chaser',  text: 'A girl who discovers she can control the weather but learns the danger of using her power carelessly' },
+      { emoji: '🏰', label: 'Ghost Castle',  text: 'Three children who spend a night in an old castle and uncover the mystery of its friendly ghost' },
+      { emoji: '🌊', label: 'Deep Below',    text: 'A boy who finds a mysterious underwater city while on a diving holiday' },
+      { emoji: '🦅', label: 'Sky Rider',     text: 'A girl who discovers a wounded giant eagle and nurses it back to health' },
+      { emoji: '🕰', label: 'Time Loop',     text: 'A boy who keeps reliving the same school day and must figure out what he is supposed to change' },
+      { emoji: '🎭', label: 'Face Swap',     text: 'Two rivals who accidentally swap bodies for a day and learn to understand each other' },
+      { emoji: '🌌', label: 'Star Child',    text: 'A girl born during a meteor shower who discovers a cosmic connection with the night sky' },
+      { emoji: '🧪', label: 'Wrong Potion',  text: 'A child who drinks a mysterious potion and gains a bizarre new ability every hour' },
+      { emoji: '🏕', label: 'Camp Secret',   text: 'A child at summer camp who discovers the lake hides an ancient creature appearing only at midnight' }
+    ],
+    '10-11': [
+      { emoji: '🔬', label: 'The Experiment', text: 'A science-obsessed girl whose home experiment opens a portal to a parallel world' },
+      { emoji: '🕵', label: 'The Suspect',    text: 'A group of classmates who investigate the mysterious disappearance of their school trophy' },
+      { emoji: '🌍', label: 'New World',      text: 'A child who moves to a new country and discovers an underground community of kids with hidden abilities' },
+      { emoji: '📖', label: 'Book Curse',     text: 'A boy who gets sucked into a library book and must complete the story to escape' },
+      { emoji: '🧬', label: 'Double Life',    text: 'Twins who discover they were secretly given different powers at birth and must work together' },
+      { emoji: '🎭', label: 'Swap Day',       text: 'A girl who wakes up in the body of her worst enemy and must navigate a day in their shoes' },
+      { emoji: '🌒', label: 'Night Watch',    text: 'A child whose small town changes completely at night, populated by shadow versions of everyone' },
+      { emoji: '🎮', label: 'Stuck Inside',   text: 'A boy who gets trapped inside his favourite video game and must beat the final level to escape' },
+      { emoji: '🐾', label: 'Wild Pack',      text: 'A girl who gains wolf senses and is led to a pack of wolves that needs her help' },
+      { emoji: '🏛', label: 'Museum Night',   text: 'Three kids accidentally locked in a museum overnight discover exhibits come to life after dark' },
+      { emoji: '📡', label: 'The Broadcast',  text: 'A boy who picks up a radio signal from the future warning him about an event at his school' },
+      { emoji: '🧭', label: 'Off the Map',    text: 'Two siblings who discover a door leading to a country not on any map' }
+    ],
+    '12-14': [
+      { emoji: '🌑', label: 'The Signal',      text: 'A teenager who intercepts a radio signal from deep space containing a message intended for them' },
+      { emoji: '🪞', label: 'Reflection',      text: 'A girl whose mirror image has been living a separate life and the two must confront what they have become' },
+      { emoji: '🧠', label: 'Rewired',         text: 'A boy who wakes from a coma able to feel other peoples emotions but finds the truth harder than expected' },
+      { emoji: '🏚', label: 'The House',       text: 'A teenager who moves into a house where every room exists in a different decade' },
+      { emoji: '🤝', label: 'The Alliance',    text: 'In a near-future city where teens are assigned social ranks, two rivals work together to expose the system' },
+      { emoji: '✍', label: 'The Author',      text: 'A girl who realises the story she has been writing is predicting real events and must decide how it ends' },
+      { emoji: '🌫', label: 'The Forgetting',  text: 'A town where people wake having forgotten one thing, and a teenager who realises it is accelerating' },
+      { emoji: '🎭', label: 'The Understudy',  text: 'A shy teenager who steps in for the lead in a school play and slowly realises the role is changing who they are' },
+      { emoji: '🔋', label: 'Low Power',       text: 'In a world where human energy is tradeable, a teenager discovers they produce something no one has seen before' },
+      { emoji: '🌊', label: 'The Crossing',    text: 'A teenager on a sailing voyage with their estranged father during which a storm reveals family truths' },
+      { emoji: '👁', label: 'Witnessed',       text: 'A girl who is the only person who can see a figure appearing in the background of every photo in her city' },
+      { emoji: '🧩', label: 'Missing Piece',   text: 'A teenager who discovers they share a soul with a stranger on the other side of the world' }
+    ]
+  };
+
+  // ── BUILDER DATA ──────────────────────────────────────────────────────────
+  var BUILDER = {
+    characters: {
+      '3-4':  ['A tiny bear', 'A lost bunny', 'A brave mouse', 'A little dragon', 'A friendly cloud', 'A magic cat'],
+      '5-6':  ['A young wizard', 'A kind princess', 'A cheeky fox', 'A tiny fairy', 'A baby dragon', 'A lost robot'],
+      '7-9':  ['A curious inventor', 'A fearless girl', 'A talking wolf', 'A time-travelling boy', 'A reluctant hero', 'A ghost with a secret'],
+      '10-11':['A gifted outsider', 'Twins with opposite powers', 'A child detective', 'A girl who hears thoughts', 'A reluctant chosen one', 'A boy raised by wolves'],
+      '12-14':['A teenager with a secret past', 'A girl who questions everything', 'An outsider with hidden power', 'A boy torn between two worlds', 'A young rebel', 'An unreliable narrator']
+    },
+    settings: {
+      '3-4':  ['A cosy woodland', 'A cloud kingdom', 'Under the ocean', 'A magic garden', 'A friendly village', 'The moon'],
+      '5-6':  ['A hidden magic school', 'A pirate island', 'An enchanted forest', 'A space station', 'A castle', 'A bustling market'],
+      '7-9':  ['A mountain with a curse', 'A sunken city', 'A hidden world underground', 'A haunted estate', 'A futuristic city', 'A wild jungle'],
+      '10-11':['A parallel dimension', 'An ancient library with living books', 'A school for unusual abilities', 'A forgotten island', 'A city that never sleeps', 'A world where magic is forbidden'],
+      '12-14':['A fractured near-future city', 'A remote lighthouse', 'A village outside of time', 'A coastal town hiding a secret', 'An underground resistance base', 'A train with no clear destination']
+    },
+    twists: {
+      '3-4':  ['Everything was a dream', 'A new friend appears', 'A surprise gift', 'Kindness solves the problem', 'A funny misunderstanding', 'Magic makes it all better'],
+      '5-6':  ['The villain turns out to be friendly', 'A secret door is discovered', 'The weakness becomes a strength', 'A mysterious stranger helps', 'The magic has unexpected side effects', 'Everything is backwards'],
+      '7-9':  ['The trusted friend is the real threat', 'The map leads somewhere unexpected', 'The hero must choose between two impossible things', 'The monster is misunderstood', 'Time starts running backwards', 'A forgotten prophecy comes true'],
+      '10-11':['The narrator has been lying all along', 'The solution makes everything worse first', 'A character from the past returns changed', 'The power comes with a terrible cost', 'Two enemies must trust each other', 'The real enemy is within the group'],
+      '12-14':['Reality may not be what it seems', 'The protagonist is complicit in the problem', 'The ending is deliberately ambiguous', 'A sacrifice that changes everything', 'The antagonist turns out to be right', 'History repeats in an unexpected way']
+    },
+    endings: {
+      '3-4':  ['Happy ever after', 'Home safe and loved', 'New friends made', 'A good night sleep', 'Everyone shares', 'A big warm hug'],
+      '5-6':  ['The hero wins the day', 'A lesson learned with a smile', 'An unexpected friendship', 'A magical reward', 'Things go back to normal but better', 'A door left open for the next adventure'],
+      '7-9':  ['Victory at a cost', 'Bittersweet but hopeful', 'The hero changed forever', 'Mystery solved, bigger mystery revealed', 'Peace restored for now', 'The adventure is only beginning'],
+      '10-11':['Hard-won resolution', 'Characters transformed by events', 'Justice but not perfectly', 'Loss that leads to growth', 'The world is changed by what happened', 'Open-ended, the reader decides'],
+      '12-14':['Ambiguous, truth left to reader', 'Resolution with emotional cost', 'Hopeful but earned', 'Full circle but different now', 'Quiet and devastating', 'A final image that says everything']
+    }
+  };
+
+  // ── HELPERS ───────────────────────────────────────────────────────────────
+  function shuffle(arr) {
+    var a = arr.slice(), i, j, t;
+    for (i = a.length - 1; i > 0; i--) {
+      j = Math.floor(Math.random() * (i + 1));
+      t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function showError(msg) {
+    var el = document.getElementById('errorMsg');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('visible');
+    setTimeout(function() { el.classList.remove('visible'); }, 6000);
+  }
+  function formatTime(s) {
+    if (!s || isNaN(s)) return '0:00';
+    var m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+  function getAgeInstructions(age) {
+    var map = {
+      '3-4':  'Write for children aged 3-4. Very simple words, very short sentences, lots of repetition, onomatopoeia, and a gentle soothing rhythm.',
+      '5-6':  'Write for children aged 5-6. Simple vocabulary, short sentences, some repetition, clear cause-and-effect, and a clear moral.',
+      '7-9':  'Write for children aged 7-9. Varied vocabulary, a proper plot arc, some suspense, and relatable characters with emotions.',
+      '10-11':'Write for children aged 10-11. Richer vocabulary, well-developed characters, subplots, natural dialogue, and deeper themes.',
+      '12-14':'Write for readers aged 12-14. Sophisticated vocabulary, complex narrative structure, nuanced characters, and emotional depth.'
+    };
+    return map[age] || '';
+  }
+
+  // ── VOICE & SPEED ─────────────────────────────────────────────────────────
+  function populateVoiceDropdowns() {
+    var voices = VOICES[selectedLang] || VOICES.en;
+    var cfg    = LANG_CONFIG[selectedLang] || LANG_CONFIG.en;
+    var select = document.getElementById('liveVoiceSelect');
+    if (!select) return;
+    select.innerHTML = '';
+    voices.forEach(function(v) {
+      var opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.label + ' - ' + v.desc;
+      if (v.id === cfg.defaultVoice) opt.selected = true;
+      select.appendChild(opt);
+    });
+  }
+  function updateSliderGradient() {
+    var s = document.getElementById('lengthSlider');
+    if (!s) return;
+    var pct = ((s.value - s.min) / (s.max - s.min)) * 100;
+    s.style.setProperty('--val', pct + '%');
+  }
+  function updateLength(el) {
+    document.getElementById('lengthDisplay').innerHTML = el.value + ' <span>minutes</span>';
+    updateSliderGradient();
+  }
+  function speedLabel(val) {
+    val = parseFloat(val);
+    if (val <= 0.70) return 'Very Slow';
+    if (val <= 0.85) return 'Slow';
+    if (val <= 1.05) return 'Normal';
+    if (val <= 1.20) return 'Fast';
+    return 'Very Fast';
+  }
+  function updateSpeedSlider(val) {
+    speechRate = parseFloat(val);
+    var lbl = document.getElementById('speedValueLabel');
+    if (lbl) lbl.textContent = speedLabel(val);
+  }
+
+  // ── AGE SELECTION ─────────────────────────────────────────────────────────
+  function selectAge(el) {
+    document.querySelectorAll('.age-pill').forEach(function(p) { p.classList.remove('selected'); });
+    el.classList.add('selected');
+    selectedAge   = el.dataset.age;
+    selectedStyle = null;
+    renderThemes();
+    renderBuilder();
+    renderStyles();
+    ['languageCard','themeCard','storyBuilderCard','styleCard','lengthCard','generateBtn'].forEach(function(id) {
+      var e = document.getElementById(id);
+      if (e) e.style.display = 'block';
+    });
+    document.getElementById('themeInput').value = '';
+    document.querySelectorAll('.style-card').forEach(function(c) { c.classList.remove('selected'); });
+  }
+
+  // ── LANGUAGE SELECTION ────────────────────────────────────────────────────
+  function selectLang(el) {
+    document.querySelectorAll('.lang-pill').forEach(function(p) { p.classList.remove('selected'); });
+    el.classList.add('selected');
+    selectedLang  = el.dataset.lang;
+    selectedStyle = null;
+    renderStyles();
+    populateVoiceDropdowns();
+    document.querySelectorAll('.style-card').forEach(function(c) { c.classList.remove('selected'); });
+    var cfg = LANG_CONFIG[selectedLang] || LANG_CONFIG.en;
+    var ss  = document.getElementById('speedSlider');
+    if (ss) { ss.value = cfg.defaultRate; updateSpeedSlider(cfg.defaultRate); }
+  }
+
+  // ── RENDER THEMES ─────────────────────────────────────────────────────────
+  function renderThemes() {
+    var container = document.getElementById('themeSuggestions');
+    if (!container) return;
+    container.innerHTML = '';
+    shuffle(THEMES[selectedAge] || []).slice(0, 6).forEach(function(t) {
+      var chip = document.createElement('div');
+      chip.className = 'suggestion-chip';
+      chip.textContent = t.emoji + ' ' + t.label;
+      chip.title = t.text;
+      chip.addEventListener('click', function() {
+        document.getElementById('themeInput').value = t.text;
+        container.querySelectorAll('.suggestion-chip').forEach(function(c) { c.classList.remove('active'); });
+        chip.classList.add('active');
+        if (selectedAge) renderBuilder();
+      });
+      container.appendChild(chip);
+    });
+    var refresh = document.createElement('div');
+    refresh.className = 'suggestion-chip refresh-chip';
+    refresh.textContent = 'More ideas';
+    refresh.addEventListener('click', renderThemes);
+    container.appendChild(refresh);
+  }
+
+  // ── RENDER BUILDER ────────────────────────────────────────────────────────
+  function themeHasCharacter() {
+    var inp = document.getElementById('themeInput');
+    var theme = inp ? inp.value : '';
+    return /^(A|An|The)\s+\w[\w\s]*\swho\s/i.test(theme.trim());
+  }
+  function renderBuilder() {
+    builderSelections = { character: '', setting: '', twist: '', ending: '' };
+    var hasChar     = themeHasCharacter();
+    var charSection = document.getElementById('characterSection');
+    if (charSection) charSection.style.display = hasChar ? 'none' : '';
+    if (!hasChar) renderBuilderSection('characterChips', 'characters', 'character', 'characterInput');
+    renderBuilderSection('settingChips', 'settings', 'setting', 'settingInput');
+    renderBuilderSection('twistChips',   'twists',   'twist',   'twistInput');
+    renderBuilderSection('endingChips',  'endings',  'ending',  null);
+  }
+  function renderBuilderSection(containerId, dataKey, selectionKey, inputId) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    shuffle(((BUILDER[dataKey] || {})[selectedAge]) || []).slice(0, 5).forEach(function(itemLabel) {
+      var chip = document.createElement('div');
+      chip.className = 'builder-chip';
+      chip.textContent = itemLabel;
+      chip.addEventListener('click', function() {
+        container.querySelectorAll('.builder-chip').forEach(function(c) { c.classList.remove('selected'); });
+        chip.classList.add('selected');
+        builderSelections[selectionKey] = itemLabel;
+        if (inputId) { var inp = document.getElementById(inputId); if (inp) inp.value = ''; }
+      });
+      container.appendChild(chip);
+    });
+    var more = document.createElement('div');
+    more.className = 'builder-chip';
+    more.style.borderStyle = 'dashed';
+    more.textContent = 'Shuffle';
+    more.addEventListener('click', function() { renderBuilderSection(containerId, dataKey, selectionKey, inputId); });
+    container.appendChild(more);
+    if (inputId) {
+      var inp = document.getElementById(inputId);
+      if (inp) inp.addEventListener('input', function() {
+        if (inp.value.trim()) {
+          container.querySelectorAll('.builder-chip').forEach(function(c) { c.classList.remove('selected'); });
+          builderSelections[selectionKey] = inp.value.trim();
+        }
+      });
+    }
+  }
+  function getBuilderPrompt() {
+    ['character','setting','twist'].forEach(function(key) {
+      var el = document.getElementById(key + 'Input');
+      if (el && el.value.trim()) builderSelections[key] = el.value.trim();
+    });
+    var parts = [];
+    if (builderSelections.character) parts.push('Main character: ' + builderSelections.character);
+    if (builderSelections.setting)   parts.push('Setting: '        + builderSelections.setting);
+    if (builderSelections.twist)     parts.push('Twist: '          + builderSelections.twist);
+    if (builderSelections.ending)    parts.push('Ending type: '    + builderSelections.ending);
+    return parts.length ? '\n\nSTORY DETAILS:\n' + parts.join('\n') : '';
+  }
+
+  // ── RENDER STYLES ─────────────────────────────────────────────────────────
+  function renderStyles() {
+    var grid = document.getElementById('styleGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    var ageStyles = ((STYLES[selectedLang] || STYLES.en)[selectedAge]) || [];
+    ageStyles.forEach(function(s) {
+      var card = document.createElement('div');
+      card.className = 'style-card';
+      card.innerHTML = '<div class="style-emoji">' + s.emoji + '</div>'
+        + '<div class="style-label">' + s.label + '</div>'
+        + '<div class="style-desc">' + s.text.substring(0, 80) + '...</div>';
+      card.addEventListener('click', function() {
+        grid.querySelectorAll('.style-card').forEach(function(c) { c.classList.remove('selected'); });
+        card.classList.add('selected');
+        selectedStyle = s;
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  // ── GENERATE STORY ────────────────────────────────────────────────────────
+  function generateStory() {
+    var theme   = document.getElementById('themeInput').value.trim();
+    var minutes = document.getElementById('lengthSlider').value;
+    var cfg     = LANG_CONFIG[selectedLang] || LANG_CONFIG.en;
+    var voices  = VOICES[selectedLang] || VOICES.en;
+    var voiceId = document.getElementById('liveVoiceSelect').value || cfg.defaultVoice;
+    var voice   = null;
+    voices.forEach(function(v) { if (v.id === voiceId) voice = v; });
+    if (!voice) voice = voices[0];
+
+    if (!selectedAge)   { showError('Please select an age group.');     return; }
+    if (!theme)         { showError('Please describe the story theme.'); return; }
+    if (!selectedStyle) { showError('Please choose a writing style.');   return; }
+
+    var targetWords  = parseInt(minutes) * 130;
+    var builderExtra = getBuilderPrompt();
+
+    document.getElementById('setupSection').style.display = 'none';
+    document.getElementById('loadingCard').classList.add('visible');
+    document.getElementById('loadingText').textContent = 'Starting your story...';
+    document.getElementById('loadingSub').textContent  = 'Words will appear in just a moment';
+
+    var prompt = 'You are a master children\'s storyteller.\n\n'
+      + cfg.promptInstruction + '\n\n'
+      + 'THEME: ' + theme + builderExtra + '\n\n'
+      + 'WRITING STYLE: ' + selectedStyle.author + ' - ' + selectedStyle.text + '\n'
+      + getAgeInstructions(selectedAge) + '\n'
+      + 'TARGET LENGTH: Approximately ' + targetWords + ' words.\n\n'
+      + 'FORMAT YOUR RESPONSE EXACTLY LIKE THIS:\n'
+      + 'TITLE: [Story title]\nSTORY:\n[Full story text]\n\n'
+      + 'Rules:\n'
+      + '- No chapter numbers or headers inside the story\n'
+      + '- Write in flowing paragraphs separated by a blank line\n'
+      + '- Do not include word count or meta-commentary\n'
+      + '- NARRATION: ' + cfg.narratorNote;
+
+    fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        stream: true,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    }).then(function(res) {
+      if (!res.ok) return res.json().then(function(ed) {
+        throw new Error('Story generation failed (' + res.status + '): ' + (ed.error ? ed.error.message : ''));
+      });
+
+      document.getElementById('loadingCard').classList.remove('visible');
+      document.getElementById('storyTitle').textContent   = 'Writing your story...';
+      document.getElementById('storyText').textContent    = '';
+      document.getElementById('storyMeta').innerHTML      = '';
+      document.getElementById('nowReading').textContent   = 'Audio will be ready when story finishes...';
+      document.getElementById('progressFill').style.width = '0%';
+      document.getElementById('playBtn').textContent      = '\u25b6';
+      document.getElementById('playBtn').disabled         = true;
+      document.getElementById('playBtn').style.opacity    = '0.4';
+      var audioStatus = document.getElementById('audioStatus');
+      if (audioStatus) audioStatus.style.display = 'none';
+      document.getElementById('storyCard').classList.add('visible');
+
+      var reader  = res.body.getReader();
+      var decoder = new TextDecoder();
+      var rawText = '', finished = false;
+
+      function readChunk() {
+        if (finished) return Promise.resolve();
+        return reader.read().then(function(sr) {
+          if (finished) return;
+          if (sr.done) {
+            finished = true;
+            finaliseStream(rawText, voice, cfg, minutes);
+            return;
+          }
+          var lines = decoder.decode(sr.value, { stream: true }).split('\n');
+          for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (line.indexOf('data: ') !== 0) continue;
+            var ds = line.slice(6);
+            if (ds === '[DONE]') {
+              finished = true;
+              finaliseStream(rawText, voice, cfg, minutes);
+              return;
+            }
+            try {
+              var p = JSON.parse(ds);
+              if (p.type === 'content_block_delta' && p.delta && p.delta.text) {
+                rawText += p.delta.text;
+                updateStoryDisplay(rawText);
+              }
+            } catch(e) {}
+          }
+          return readChunk();
+        });
+      }
+      return readChunk();
+
+    }).catch(function(err) {
+      document.getElementById('loadingCard').classList.remove('visible');
+      document.getElementById('storyCard').classList.remove('visible');
+      document.getElementById('setupSection').style.display = 'block';
+      showError('Something went wrong: ' + err.message);
+    });
+  }
+
+  function updateStoryDisplay(rawText) {
+    // Extract title
+    var tm = rawText.match(/TITLE:\s*([^\n]+)/);
+    if (tm) document.getElementById('storyTitle').textContent = tm[1].trim();
+    // Extract story body - everything after STORY: line
+    var storyIdx = rawText.indexOf('STORY:');
+    if (storyIdx !== -1) {
+      var afterStory = rawText.slice(storyIdx + 6).replace(/^\s*\n/, '');
+      document.getElementById('storyText').textContent = afterStory;
+    }
+  }
+
+  function finaliseStream(rawText, voice, cfg, minutes) {
+    // Extract title
+    var storyTitle = '';
+    var tm = rawText.match(/TITLE:\s*([^\n]+)/);
+    if (tm) {
+      storyTitle = tm[1].trim();
+      document.getElementById('storyTitle').textContent = storyTitle;
+    }
+    // Extract story body
+    var storyIdx = rawText.indexOf('STORY:');
+    var storyText = '';
+    if (storyIdx !== -1) {
+      storyText = rawText.slice(storyIdx + 6).replace(/^\s*\n/, '').trim();
+    } else {
+      storyText = rawText.trim();
+    }
+    finishStory(storyTitle, storyText, voice, cfg, minutes);
+  }
+
+  function finishStory(storyTitle, storyText, voice, cfg, minutes) {
+    fullStoryText = storyText.trim();
+    if (!fullStoryText) { showError('No story content received. Please try again.'); return; }
+    document.getElementById('storyText').textContent = fullStoryText;
+    document.getElementById('storyMeta').innerHTML =
+      '<span class="meta-tag">Age ' + selectedAge + '</span>' +
+      '<span class="meta-tag">' + minutes + ' min</span>' +
+      '<span class="meta-tag">' + cfg.name + '</span>' +
+      '<span class="meta-tag">Style of ' + selectedStyle.author + '</span>';
+    setAudioLoading(true);
+    // Narration: title first (with pause), then story body
+    var narrationTitle = storyTitle || '';
+    generateGoogleAudio(fullStoryText, voice.id, voice.lang, narrationTitle)
+      .then(function(url) { setupAudioPlayer(url); setAudioLoading(false); })
+      .catch(function(err) { setAudioLoading(false); document.getElementById('nowReading').textContent = 'Audio failed: ' + err.message; });
+  }
+
+  // ── GOOGLE TTS ────────────────────────────────────────────────────────────
+  function generateGoogleAudio(text, voiceId, languageCode, storyTitle) {
+    var isChinese = (languageCode === 'cmn-CN');
+    var isFrench  = (languageCode === 'fr-FR' || languageCode === 'fr-CA');
+
+    // ── SSML helpers ────────────────────────────────────────────────────────
+    function escXml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+    }
+
+    // Build SSML for the title chunk - slow, warm, deliberate
+    function titleSsml(title) {
+      var rate = isChinese ? '85%' : '82%';
+      var pitch = isChinese ? '0st' : '+0.5st';
+      return '<speak>'
+        + '<break time="600ms"/>'
+        + '<prosody rate="' + rate + '" pitch="' + pitch + '">'
+        + '<emphasis level="moderate">' + escXml(title) + '</emphasis>'
+        + '</prosody>'
+        + '<break time="900ms"/>'
+        + '</speak>';
+    }
+
+    // Build SSML for a story paragraph - warm, natural, with breathing pauses
+    function paragraphSsml(para) {
+      if (isChinese) {
+        // For Chinese: wrap in slow prosody, add breaks after sentence-end punctuation
+        var marked = '';
+        for (var ci = 0; ci < para.length; ci++) {
+          marked += escXml(para[ci]);
+          var c = para[ci];
+          if (c === '\u3002' || c === '\uff01' || c === '\uff1f') {
+            marked += '<break time="450ms"/>';
+          } else if (c === '\uff0c' || c === '\u3001') {
+            marked += '<break time="200ms"/>';
+          }
+        }
+        return '<speak><prosody rate="90%" pitch="-0.5st">' + marked + '</prosody></speak>';
+      } else {
+        // English/French: add pauses at em-dashes and after sentence ends
+        var s = escXml(para);
+        // em-dash -> pause
+        s = s.replace(/\u2014/g, '<break time="350ms"/>');
+        // sentence endings -> breath pause
+        s = s.replace(/([.!?])\s+/g, '$1<break time="400ms"/> ');
+        // comma pauses
+        s = s.replace(/,\s+/g, ',<break time="180ms"/> ');
+        // dialogue opening quote - slight lift
+        s = s.replace(/\u201c([^"]*)\u201d/g,
+          '<prosody pitch="+1.5st" rate="97%">\u201c$1\u201d</prosody>');
+        var rate = isFrench ? '92%' : '90%';
+        var pitch = isFrench ? '-0.3st' : '-0.5st';
+        return '<speak><prosody rate="' + rate + '" pitch="' + pitch + '">'
+          + s + '<break time="500ms"/>'
+          + '</prosody></speak>';
+      }
+    }
+
+    // ── Split text into chunks ───────────────────────────────────────────────
+    var chunks = []; // each: { ssml: string }
+
+    if (storyTitle) {
+      chunks.push({ ssml: titleSsml(storyTitle) });
+    }
+
+    if (isChinese) {
+      // Split on sentence-end punctuation, group into ~150-char chunks
+      var marked = '';
+      for (var ci = 0; ci < text.length; ci++) {
+        marked += text[ci];
+        var c = text[ci];
+        if (c === '\u3002' || c === '\uff01' || c === '\uff1f' || c === '!' || c === '?') marked += '|';
+      }
+      var sentences = marked.split('|').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+      var cur = '';
+      sentences.forEach(function(s) {
+        if (cur.length + s.length > 150 && cur.length > 0) {
+          chunks.push({ ssml: paragraphSsml(cur) });
+          cur = s;
+        } else {
+          cur += s;
+        }
+      });
+      if (cur.length > 0) chunks.push({ ssml: paragraphSsml(cur) });
+    } else {
+      // Split on paragraph breaks
+      var paras = text.split('\n\n').filter(function(p) { return p.trim().length > 0; });
+      if (paras.length === 0) paras = [text.trim()];
+      paras.forEach(function(p) { chunks.push({ ssml: paragraphSsml(p.trim()) }); });
+    }
+
+    if (chunks.length === 0) chunks = [{ ssml: '<speak>' + escXml(text.substring(0, 300)) + '</speak>' }];
+
+    // ── Audio config - headphone profile is warmer/more intimate ────────────
+    var audioConfig = {
+      audioEncoding: 'MP3',
+      speakingRate: speechRate,
+      pitch: 0.0,
+      effectsProfileId: ['headphone-class-device']
+    };
+
+    // ── Fetch sequentially, decode with Web Audio API, concatenate ──────────
+    var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var decodedBuffers = [];
+
+    function fetchAndDecode(index) {
+      if (index >= chunks.length) {
+        var totalLength = decodedBuffers.reduce(function(sum, b) { return sum + b.length; }, 0);
+        var sampleRate  = decodedBuffers[0].sampleRate;
+        var numChannels = decodedBuffers[0].numberOfChannels;
+        var combined    = audioCtx.createBuffer(numChannels, totalLength, sampleRate);
+        var offset = 0;
+        decodedBuffers.forEach(function(buf) {
+          for (var ch = 0; ch < numChannels; ch++) {
+            combined.getChannelData(ch).set(buf.getChannelData(ch), offset);
+          }
+          offset += buf.length;
+        });
+        var wavBlob = audioBufferToWav(combined);
+        audioCtx.close();
+        return Promise.resolve(URL.createObjectURL(wavBlob));
+      }
+
+      return fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { ssml: chunks[index].ssml },
+          voice: { languageCode: languageCode, name: voiceId },
+          audioConfig: audioConfig
+        })
+      }).then(function(r) {
+        if (!r.ok) return r.json().then(function(e) {
+          throw new Error((e && e.error && e.error.message) ? e.error.message : 'TTS error ' + r.status);
+        });
+        return r.json();
+      }).then(function(d) {
+        if (!d.audioContent) throw new Error('No audio for chunk ' + index);
+        var bin  = atob(d.audioContent);
+        var ab   = new ArrayBuffer(bin.length);
+        var view = new Uint8Array(ab);
+        for (var k = 0; k < bin.length; k++) view[k] = bin.charCodeAt(k);
+        return audioCtx.decodeAudioData(ab);
+      }).then(function(decoded) {
+        decodedBuffers.push(decoded);
+        return fetchAndDecode(index + 1);
+      });
+    }
+
+    return fetchAndDecode(0);
+  }
+
+  // Convert AudioBuffer to WAV Blob
+  function audioBufferToWav(buffer) {
+    var numCh  = buffer.numberOfChannels;
+    var sr     = buffer.sampleRate;
+    var len    = buffer.length;
+    var bps    = 2; // 16-bit
+    var ab     = new ArrayBuffer(44 + len * numCh * bps);
+    var view   = new DataView(ab);
+    function writeStr(o, s) { for (var i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); }
+    writeStr(0, 'RIFF');
+    view.setUint32(4,  36 + len * numCh * bps, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1,  true);
+    view.setUint16(22, numCh, true);
+    view.setUint32(24, sr, true);
+    view.setUint32(28, sr * numCh * bps, true);
+    view.setUint16(32, numCh * bps, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, 'data');
+    view.setUint32(40, len * numCh * bps, true);
+    var offset = 44;
+    for (var i = 0; i < len; i++) {
+      for (var ch = 0; ch < numCh; ch++) {
+        var s = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+    return new Blob([ab], { type: 'audio/wav' });
+  }
+
+  // ── AUDIO PLAYER ──────────────────────────────────────────────────────────
+  function setAudioLoading(isLoading) {
+    var playBtn = document.getElementById('playBtn');
+    var st      = document.getElementById('audioStatus');
+    if (isLoading) {
+      playBtn.disabled = true; playBtn.style.opacity = '0.4';
+      if (st) { st.style.display = 'flex'; st.textContent = 'Preparing audio...'; }
+      document.getElementById('nowReading').textContent = 'Generating narration...';
+    } else {
+      playBtn.disabled = false; playBtn.style.opacity = '1';
+      if (st) st.style.display = 'none';
+      document.getElementById('nowReading').textContent = 'Audio ready - press play to begin';
+    }
+  }
+  function setupAudioPlayer(url) {
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    currentAudio = new Audio(url);
+    currentAudio.addEventListener('timeupdate', function() {
+      if (!currentAudio.duration) return;
+      document.getElementById('progressFill').style.width = (currentAudio.currentTime / currentAudio.duration * 100) + '%';
+      document.getElementById('currentTime').textContent  = formatTime(currentAudio.currentTime);
+    });
+    currentAudio.addEventListener('loadedmetadata', function() {
+      document.getElementById('totalTime').textContent = formatTime(currentAudio.duration);
+    });
+    currentAudio.addEventListener('ended', function() {
+      document.getElementById('playBtn').textContent    = '\u25b6';
+      document.getElementById('nowReading').textContent = 'Story complete';
+      document.getElementById('progressFill').style.width = '100%';
+    });
+  }
+  function togglePlay() {
+    if (!currentAudio) return;
+    if (currentAudio.paused) {
+      currentAudio.play();
+      document.getElementById('playBtn').textContent    = '\u23f8';
+      document.getElementById('nowReading').textContent = 'Now playing...';
+    } else {
+      currentAudio.pause();
+      document.getElementById('playBtn').textContent    = '\u25b6';
+      document.getElementById('nowReading').textContent = 'Paused - press play to continue';
+    }
+  }
+  function stopReading() {
+    if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
+    document.getElementById('playBtn').textContent      = '\u25b6';
+    document.getElementById('progressFill').style.width = '0%';
+    document.getElementById('currentTime').textContent  = '0:00';
+    document.getElementById('nowReading').textContent   = 'Press play to begin narration';
+  }
+  function changeVoiceLive() {
+    if (!fullStoryText) return;
+    var voiceId = document.getElementById('liveVoiceSelect').value;
+    var voices  = VOICES[selectedLang] || VOICES.en;
+    var voice   = null;
+    voices.forEach(function(v) { if (v.id === voiceId) voice = v; });
+    if (!voice) return;
+    var ct = currentAudio ? currentAudio.currentTime : 0;
+    if (currentAudio) currentAudio.pause();
+    setAudioLoading(true);
+    var titleEl = document.getElementById('storyTitle');
+    var currentTitle = titleEl ? titleEl.textContent : '';
+    generateGoogleAudio(fullStoryText, voiceId, voice.lang, currentTitle)
+      .then(function(url) {
+        setupAudioPlayer(url); setAudioLoading(false);
+        if (ct > 0 && currentAudio && currentAudio.duration) currentAudio.currentTime = Math.min(ct, currentAudio.duration - 1);
+      }).catch(function(err) { setAudioLoading(false); showError('Could not switch voice: ' + err.message); });
+  }
+  function newStory() {
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    document.getElementById('storyCard').classList.remove('visible');
+    document.getElementById('setupSection').style.display = 'block';
+    selectedAge = null; selectedStyle = null; fullStoryText = '';
+    builderSelections = { character: '', setting: '', twist: '', ending: '' };
+    document.querySelectorAll('.age-pill').forEach(function(p) { p.classList.remove('selected'); });
+    document.getElementById('themeInput').value = '';
+    ['languageCard','themeCard','storyBuilderCard','styleCard','lengthCard','generateBtn'].forEach(function(id) {
+      var e = document.getElementById(id); if (e) e.style.display = 'none';
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── INIT ──────────────────────────────────────────────────────────────────
+  function initEvents() {
+    var slider = document.getElementById('lengthSlider');
+    if (slider) {
+      slider.addEventListener('input',  function() { updateLength(slider); });
+      slider.addEventListener('change', function() { updateLength(slider); });
+    }
+    var speedSlider = document.getElementById('speedSlider');
+    if (speedSlider) {
+      speedSlider.addEventListener('input', function() { updateSpeedSlider(speedSlider.value); });
+      speedSlider.addEventListener('change', function() {
+        if (!fullStoryText) return;
+        var voiceId = document.getElementById('liveVoiceSelect').value;
+        var voices  = VOICES[selectedLang] || VOICES.en;
+        var voice   = null;
+        voices.forEach(function(v) { if (v.id === voiceId) voice = v; });
+        if (!voice) return;
+        var ct = currentAudio ? currentAudio.currentTime : 0;
+        if (currentAudio) currentAudio.pause();
+        setAudioLoading(true);
+        var titleEl = document.getElementById('storyTitle');
+        var currentTitle = titleEl ? titleEl.textContent : '';
+        generateGoogleAudio(fullStoryText, voiceId, voice.lang, currentTitle)
+          .then(function(url) {
+            setupAudioPlayer(url); setAudioLoading(false);
+            if (ct > 0 && currentAudio && currentAudio.duration) currentAudio.currentTime = Math.min(ct, currentAudio.duration - 1);
+          }).catch(function(err) { setAudioLoading(false); showError('Speed update failed: ' + err.message); });
+      });
+    }
+    var liveVoice = document.getElementById('liveVoiceSelect');
+    if (liveVoice) liveVoice.addEventListener('change', changeVoiceLive);
+    var progressBg = document.getElementById('progressBg');
+    if (progressBg) progressBg.addEventListener('click', function(e) {
+      if (!currentAudio || !currentAudio.duration) return;
+      var rect = progressBg.getBoundingClientRect();
+      currentAudio.currentTime = ((e.clientX - rect.left) / rect.width) * currentAudio.duration;
+    });
+    var themeInput = document.getElementById('themeInput');
+    if (themeInput) themeInput.addEventListener('input', function() { if (selectedAge) renderBuilder(); });
+    updateSliderGradient();
+    populateVoiceDropdowns();
+    updateSpeedSlider(0.95);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initEvents);
+  } else {
+    initEvents();
+  }
+
+</script>
+
+
+
+
+</body>
+</html>
