@@ -1,10 +1,13 @@
 export const config = { runtime: 'edge' };
 
-const ANTHROPIC_KEY = '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';
-
 export default async function handler(req) {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'API key not configured' }), { status: 500 });
   }
 
   const body = await req.text();
@@ -13,13 +16,12 @@ export default async function handler(req) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_KEY,
+      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01'
     },
     body: body
   });
 
-  // Stream the response back
   return new Response(response.body, {
     status: response.status,
     headers: {
