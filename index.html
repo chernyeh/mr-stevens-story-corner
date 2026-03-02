@@ -796,39 +796,69 @@
       + '- Do not include word count or meta-commentary\n'
       + '- NARRATION: ' + cfg.narratorNote;
 
-    document.getElementById('loadingCard').classList.remove('visible');
-    document.getElementById('storyTitle').textContent   = 'Writing your story...';
-    document.getElementById('storyText').textContent    = '';
-    document.getElementById('storyMeta').innerHTML      = '';
-    document.getElementById('nowReading').textContent   = 'Audio will be ready when story finishes...';
-    document.getElementById('progressFill').style.width = '0%';
-    document.getElementById('playBtn').textContent      = '\u25b6';
-    document.getElementById('playBtn').disabled         = true;
-    document.getElementById('playBtn').style.opacity    = '0.4';
-    var audioStatus = document.getElementById('audioStatus');
-    if (audioStatus) audioStatus.style.display = 'none';
-    document.getElementById('storyCard').classList.add('visible');
-    document.getElementById('loadingText').textContent = 'Writing your story...';
-    document.getElementById('loadingCard').classList.add('visible');
-
     fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
         max_tokens: 4096,
-        stream: false,
+        stream: true,
         messages: [{ role: 'user', content: prompt }]
       })
     }).then(function(res) {
       if (!res.ok) return res.json().then(function(ed) {
         throw new Error('Story generation failed (' + res.status + '): ' + (ed.error ? ed.error.message : ''));
       });
-      return res.json();
-    }).then(function(data) {
+
       document.getElementById('loadingCard').classList.remove('visible');
-      var rawText = data.content[0].text;
-      finaliseStream(rawText, voice, cfg, minutes);
+      document.getElementById('storyTitle').textContent   = 'Writing your story...';
+      document.getElementById('storyText').textContent    = '';
+      document.getElementById('storyMeta').innerHTML      = '';
+      document.getElementById('nowReading').textContent   = 'Audio will be ready when story finishes...';
+      document.getElementById('progressFill').style.width = '0%';
+      document.getElementById('playBtn').textContent      = '\u25b6';
+      document.getElementById('playBtn').disabled         = true;
+      document.getElementById('playBtn').style.opacity    = '0.4';
+      var audioStatus = document.getElementById('audioStatus');
+      if (audioStatus) audioStatus.style.display = 'none';
+      document.getElementById('storyCard').classList.add('visible');
+
+      var reader  = res.body.getReader();
+      var decoder = new TextDecoder();
+      var rawText = '', finished = false;
+
+      function readChunk() {
+        if (finished) return Promise.resolve();
+        return reader.read().then(function(sr) {
+          if (finished) return;
+          if (sr.done) {
+            finished = true;
+            finaliseStream(rawText, voice, cfg, minutes);
+            return;
+          }
+          var lines = decoder.decode(sr.value, { stream: true }).split('\n');
+          for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (line.indexOf('data: ') !== 0) continue;
+            var ds = line.slice(6);
+            if (ds === '[DONE]') {
+              finished = true;
+              finaliseStream(rawText, voice, cfg, minutes);
+              return;
+            }
+            try {
+              var p = JSON.parse(ds);
+              if (p.type === 'content_block_delta' && p.delta && p.delta.text) {
+                rawText += p.delta.text;
+                updateStoryDisplay(rawText);
+              }
+            } catch(e) {}
+          }
+          return readChunk();
+        });
+      }
+      return readChunk();
+
     }).catch(function(err) {
       document.getElementById('loadingCard').classList.remove('visible');
       document.getElementById('storyCard').classList.remove('visible');
