@@ -592,7 +592,13 @@
     voices.forEach(function(v) {
       var opt = document.createElement('option');
       opt.value = v.id;
-      opt.textContent = v.label + ' - ' + v.desc;
+      // Detect voice type from ID for discreet label
+      var typeTag = '';
+      var vid = v.id.toLowerCase();
+      if (vid.indexOf('journey') !== -1)  typeTag = ' · Journey';
+      else if (vid.indexOf('neural2') !== -1) typeTag = ' · Neural2';
+      else if (vid.indexOf('wavenet') !== -1) typeTag = ' · Wavenet';
+      opt.textContent = v.label + ' — ' + v.desc + typeTag;
       if (v.id === cfg.defaultVoice) opt.selected = true;
       select.appendChild(opt);
     });
@@ -894,8 +900,8 @@
     // Title - read like a narrator announcing the story name
     function titleChunk(title) {
       if (isJourney) {
-        // Journey voices: plain text only - add ellipsis before/after for natural pause
-        return { type: 'text', value: '...  ' + title + '...' };
+        // Journey voices: plain text only - long pause after title (double sentence pause)
+        return { type: 'text', value: title + '......' };
       }
       var t = escXml(title);
       return { type: 'ssml', value: '<speak>'
@@ -903,7 +909,7 @@
         + '<prosody rate="78%" pitch="-1st">'
         + t
         + '</prosody>'
-        + '<break time="850ms"/>'
+        + '<break time="1700ms"/>'
         + '</speak>' };
     }
 
@@ -943,15 +949,23 @@
           + '<break time="500ms"/>'
           + '</prosody></speak>' };
       } else if (isJourney) {
-        // Journey voices: plain text only - use punctuation to encourage natural pauses
-        // Add ellipsis after sentence endings to force a longer pause
+        // Journey voices: plain text only
+        // Punctuation tricks: ellipses force pauses, commas add micro-pauses
         var s = para;
-        // After full stop, question mark, exclamation - add ellipsis for pause
-        s = s.replace(/\.\s+/g, '...  ');
-        s = s.replace(/\?\s+/g, '?..  ');
-        s = s.replace(/!\s+/g, '!..  ');
-        // Em-dash - add comma for slight pause
-        s = s.replace(/\u2014/g, ', ');
+        // Sentence endings - long pause via ellipsis
+        s = s.replace(/\.\s+/g, '...   ');
+        // Question marks - medium pause + preserve inflection
+        s = s.replace(/\?\s+/g, '?..   ');
+        // Exclamation - sharp then pause
+        s = s.replace(/!\s+/g, '!..   ');
+        // Comma - keep comma, add extra space for breath
+        s = s.replace(/,\s+/g, ',  ');
+        // Semicolon - treat like a longer comma
+        s = s.replace(/;\s+/g, ',...  ');
+        // Em-dash - comma pause
+        s = s.replace(/\u2014/g, ',  ');
+        // Ellipsis already in text - extend it
+        s = s.replace(/\.\.\.\s*/g, '......  ');
         return { type: 'text', value: s };
       } else {
         // Neural2/Wavenet: full prosody + breaks
@@ -1002,13 +1016,12 @@
 
     // ── Audio config ────────────────────────────────────────────────────────
     // Journey voices need a slower base rate - they naturally speak faster
-    // and don't support SSML prosody to compensate
     var effectiveSpeechRate = isJourney ? speechRate * 0.82 : speechRate;
 
     var audioConfig = {
       audioEncoding: 'MP3',
       speakingRate: effectiveSpeechRate,
-      pitch: 0.0,
+      pitch: -2.0,
       effectsProfileId: ['headphone-class-device']
     };
 
