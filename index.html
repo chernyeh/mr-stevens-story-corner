@@ -891,25 +891,20 @@
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
     }
 
-    // Title SSML - read like a narrator announcing the story name
-    function titleSsml(title) {
-      var t = escXml(title);
+    // Title - read like a narrator announcing the story name
+    function titleChunk(title) {
       if (isJourney) {
-        // Journey: breaks only
-        return '<speak>'
-          + '<break time="500ms"/>'
-          + t
-          + '<break time="800ms"/>'
-          + '</speak>';
+        // Journey voices: plain text only, no SSML
+        return { type: 'text', value: title };
       }
-      // Neural2/Wavenet: slow, slightly lower pitch, warm and deliberate
-      return '<speak>'
+      var t = escXml(title);
+      return { type: 'ssml', value: '<speak>'
         + '<break time="500ms"/>'
         + '<prosody rate="78%" pitch="-1st">'
         + t
         + '</prosody>'
         + '<break time="850ms"/>'
-        + '</speak>';
+        + '</speak>' };
     }
 
     // Add punctuation-aware breaks to a text string
@@ -943,15 +938,13 @@
           else if (c === '\uff1f') marked += '<break time="420ms"/>';
           else if (c === '\uff0c' || c === '\u3001') marked += '<break time="220ms"/>';
         }
-        return '<speak><prosody rate="88%" pitch="-0.5st">'
+        return { type: 'ssml', value: '<speak><prosody rate="88%" pitch="-0.5st">'
           + marked
           + '<break time="500ms"/>'
-          + '</prosody></speak>';
+          + '</prosody></speak>' };
       } else if (isJourney) {
-        // Journey: breaks only, no prosody
-        var s = escXml(para);
-        s = addBreaks(s);
-        return '<speak>' + s + '<break time="550ms"/></speak>';
+        // Journey voices: plain text only, no SSML at all
+        return { type: 'text', value: para };
       } else {
         // Neural2/Wavenet: full prosody + breaks
         var s = escXml(para);
@@ -961,12 +954,12 @@
         s = addBreaks(s);
         var rate = isFrench ? '91%' : '88%';
         var pitch = isFrench ? '-0.5st' : '-1st';
-        return '<speak>'
+        return { type: 'ssml', value: '<speak>'
           + '<prosody rate="' + rate + '" pitch="' + pitch + '">'
           + s
           + '<break time="550ms"/>'
           + '</prosody>'
-          + '</speak>';
+          + '</speak>' };
       }
     }
 
@@ -974,7 +967,7 @@
     var chunks = [];
 
     if (storyTitle) {
-      chunks.push({ ssml: titleSsml(storyTitle) });
+      chunks.push(titleChunk(storyTitle));
     }
 
     if (isChinese) {
@@ -987,17 +980,17 @@
       var sentences = marked.split('|').map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
       var cur = '';
       sentences.forEach(function(s) {
-        if (cur.length + s.length > 150 && cur.length > 0) { chunks.push({ ssml: paragraphSsml(cur) }); cur = s; }
+        if (cur.length + s.length > 150 && cur.length > 0) { chunks.push(paragraphSsml(cur)); cur = s; }
         else cur += s;
       });
-      if (cur.length > 0) chunks.push({ ssml: paragraphSsml(cur) });
+      if (cur.length > 0) chunks.push(paragraphSsml(cur));
     } else {
       var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
-      paras.forEach(function(p){ chunks.push({ ssml: paragraphSsml(p.trim()) }); });
+      paras.forEach(function(p){ chunks.push(paragraphSsml(p.trim())); });
     }
 
-    if (chunks.length === 0) chunks = [{ ssml: '<speak>' + escXml(text.substring(0, 300)) + '</speak>' }];
+    if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
 
     // ── Audio config ────────────────────────────────────────────────────────
     var audioConfig = {
@@ -1033,7 +1026,9 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          input: { ssml: chunks[index].ssml },
+          input: chunks[index].type === 'ssml'
+            ? { ssml: chunks[index].value }
+            : { text: chunks[index].value },
           voice: { languageCode: languageCode, name: voiceId },
           audioConfig: audioConfig
         })
