@@ -990,6 +990,10 @@
 
     if (storyTitle) {
       chunks.push(titleChunk(storyTitle));
+      // For Journey voices, insert 1.5s of real silence after the title
+      if (isJourney) {
+        chunks.push({ type: 'silence', durationMs: 1500 });
+      }
     }
 
     if (isChinese) {
@@ -1033,6 +1037,15 @@
     var decodedBuffers = [];
 
     function fetchAndDecode(index) {
+      // Handle silence chunks - create a silent AudioBuffer directly
+      if (index < chunks.length && chunks[index].type === 'silence') {
+        var sampleRate = 24000;
+        var numSamples = Math.floor(sampleRate * chunks[index].durationMs / 1000);
+        var silentBuf  = audioCtx.createBuffer(1, numSamples, sampleRate);
+        decodedBuffers.push(silentBuf);
+        return fetchAndDecode(index + 1);
+      }
+
       if (index >= chunks.length) {
         var totalLength = decodedBuffers.reduce(function(sum, b){ return sum + b.length; }, 0);
         var sampleRate  = decodedBuffers[0].sampleRate;
