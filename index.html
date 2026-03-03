@@ -800,7 +800,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 4096,
         stream: false,
         messages: [{ role: 'user', content: prompt }]
@@ -885,109 +885,121 @@
   function generateGoogleAudio(text, voiceId, languageCode, storyTitle) {
     var isChinese = (languageCode === 'cmn-CN');
     var isFrench  = (languageCode === 'fr-FR' || languageCode === 'fr-CA');
-
-    // ── SSML helpers ────────────────────────────────────────────────────────
     var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
 
     function escXml(s) {
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
     }
 
-    // Build SSML for the title chunk - slow, warm, deliberate
+    // Title SSML - read like a narrator announcing the story name
     function titleSsml(title) {
+      var t = escXml(title);
       if (isJourney) {
-        // Journey voices: only breaks supported, no prosody/emphasis
+        // Journey: breaks only
         return '<speak>'
-          + '<break time="600ms"/>'
-          + escXml(title)
-          + '<break time="900ms"/>'
+          + '<break time="500ms"/>'
+          + t
+          + '<break time="800ms"/>'
           + '</speak>';
       }
-      var rate = isChinese ? '85%' : '82%';
-      var pitch = isChinese ? '0st' : '+0.5st';
+      // Neural2/Wavenet: slow, slightly lower pitch, warm and deliberate
       return '<speak>'
-        + '<break time="600ms"/>'
-        + '<prosody rate="' + rate + '" pitch="' + pitch + '">'
-        + escXml(title)
+        + '<break time="500ms"/>'
+        + '<prosody rate="78%" pitch="-1st">'
+        + t
         + '</prosody>'
-        + '<break time="900ms"/>'
+        + '<break time="850ms"/>'
         + '</speak>';
     }
 
-    // Build SSML for a story paragraph - warm, natural, with breathing pauses
+    // Add punctuation-aware breaks to a text string
+    function addBreaks(s) {
+      s = s.replace(/\u2014/g, '<break time="300ms"/>');
+      // Full stop - longer pause
+      s = s.replace(/\.\s+/g, '.<break time="450ms"/> ');
+      // Question mark - medium pause with slight upward feel
+      s = s.replace(/\?\s+/g, '?<break time="400ms"/> ');
+      // Exclamation mark - sharp pause
+      s = s.replace(/!\s+/g, '!<break time="380ms"/> ');
+      // Comma - short breath
+      s = s.replace(/,\s+/g, ',<break time="200ms"/> ');
+      // Semicolon - mid pause
+      s = s.replace(/;\s+/g, ';<break time="280ms"/> ');
+      // Ellipsis - thoughtful pause
+      s = s.replace(/\.\.\.\s*/g, '...<break time="500ms"/> ');
+      // New line within paragraph
+      s = s.replace(/\n/g, '<break time="300ms"/>');
+      return s;
+    }
+
     function paragraphSsml(para) {
       if (isChinese) {
-        // For Chinese: wrap in slow prosody, add breaks after sentence-end punctuation
         var marked = '';
         for (var ci = 0; ci < para.length; ci++) {
           marked += escXml(para[ci]);
           var c = para[ci];
-          if (c === '\u3002' || c === '\uff01' || c === '\uff1f') {
-            marked += '<break time="450ms"/>';
-          } else if (c === '\uff0c' || c === '\u3001') {
-            marked += '<break time="200ms"/>';
-          }
+          if (c === '\u3002') marked += '<break time="480ms"/>';
+          else if (c === '\uff01') marked += '<break time="400ms"/>';
+          else if (c === '\uff1f') marked += '<break time="420ms"/>';
+          else if (c === '\uff0c' || c === '\u3001') marked += '<break time="220ms"/>';
         }
-        return '<speak><prosody rate="90%" pitch="-0.5st">' + marked + '</prosody></speak>';
-      } else if (isJourney) {
-        // Journey voices: only use break tags, no prosody/emphasis
-        var s = escXml(para);
-        s = s.replace(/\u2014/g, '<break time="350ms"/>');
-        s = s.replace(/([.!?])\s+/g, '$1<break time="400ms"/> ');
-        s = s.replace(/,\s+/g, ',<break time="180ms"/> ');
-        return '<speak>' + s + '<break time="500ms"/></speak>';
-      } else {
-        // Neural2/Wavenet: full prosody support
-        var s = escXml(para);
-        s = s.replace(/\u2014/g, '<break time="350ms"/>');
-        s = s.replace(/([.!?])\s+/g, '$1<break time="400ms"/> ');
-        s = s.replace(/,\s+/g, ',<break time="180ms"/> ');
-        s = s.replace(/\u201c([^"]*)\u201d/g,
-          '<prosody pitch="+1.5st" rate="97%">\u201c$1\u201d</prosody>');
-        var rate = isFrench ? '92%' : '90%';
-        var pitch = isFrench ? '-0.3st' : '-0.5st';
-        return '<speak><prosody rate="' + rate + '" pitch="' + pitch + '">'
-          + s + '<break time="500ms"/>'
+        return '<speak><prosody rate="88%" pitch="-0.5st">'
+          + marked
+          + '<break time="500ms"/>'
           + '</prosody></speak>';
+      } else if (isJourney) {
+        // Journey: breaks only, no prosody
+        var s = escXml(para);
+        s = addBreaks(s);
+        return '<speak>' + s + '<break time="550ms"/></speak>';
+      } else {
+        // Neural2/Wavenet: full prosody + breaks
+        var s = escXml(para);
+        // Dialogue in curly quotes - slightly higher pitch
+        s = s.replace(/\u201c([^"]*)\u201d/g,
+          '<prosody pitch="+1.2st" rate="98%">\u201c$1\u201d</prosody>');
+        s = addBreaks(s);
+        var rate = isFrench ? '91%' : '88%';
+        var pitch = isFrench ? '-0.5st' : '-1st';
+        return '<speak>'
+          + '<prosody rate="' + rate + '" pitch="' + pitch + '">'
+          + s
+          + '<break time="550ms"/>'
+          + '</prosody>'
+          + '</speak>';
       }
     }
 
-    // ── Split text into chunks ───────────────────────────────────────────────
-    var chunks = []; // each: { ssml: string }
+    // ── Split into chunks ───────────────────────────────────────────────────
+    var chunks = [];
 
     if (storyTitle) {
       chunks.push({ ssml: titleSsml(storyTitle) });
     }
 
     if (isChinese) {
-      // Split on sentence-end punctuation, group into ~150-char chunks
       var marked = '';
       for (var ci = 0; ci < text.length; ci++) {
         marked += text[ci];
         var c = text[ci];
         if (c === '\u3002' || c === '\uff01' || c === '\uff1f' || c === '!' || c === '?') marked += '|';
       }
-      var sentences = marked.split('|').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+      var sentences = marked.split('|').map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
       var cur = '';
       sentences.forEach(function(s) {
-        if (cur.length + s.length > 150 && cur.length > 0) {
-          chunks.push({ ssml: paragraphSsml(cur) });
-          cur = s;
-        } else {
-          cur += s;
-        }
+        if (cur.length + s.length > 150 && cur.length > 0) { chunks.push({ ssml: paragraphSsml(cur) }); cur = s; }
+        else cur += s;
       });
       if (cur.length > 0) chunks.push({ ssml: paragraphSsml(cur) });
     } else {
-      // Split on paragraph breaks
-      var paras = text.split('\n\n').filter(function(p) { return p.trim().length > 0; });
+      var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
-      paras.forEach(function(p) { chunks.push({ ssml: paragraphSsml(p.trim()) }); });
+      paras.forEach(function(p){ chunks.push({ ssml: paragraphSsml(p.trim()) }); });
     }
 
     if (chunks.length === 0) chunks = [{ ssml: '<speak>' + escXml(text.substring(0, 300)) + '</speak>' }];
 
-    // ── Audio config - headphone profile is warmer/more intimate ────────────
+    // ── Audio config ────────────────────────────────────────────────────────
     var audioConfig = {
       audioEncoding: 'MP3',
       speakingRate: speechRate,
@@ -995,13 +1007,13 @@
       effectsProfileId: ['headphone-class-device']
     };
 
-    // ── Fetch sequentially, decode with Web Audio API, concatenate ──────────
+    // ── Fetch sequentially, decode + concatenate via Web Audio API ──────────
     var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     var decodedBuffers = [];
 
     function fetchAndDecode(index) {
       if (index >= chunks.length) {
-        var totalLength = decodedBuffers.reduce(function(sum, b) { return sum + b.length; }, 0);
+        var totalLength = decodedBuffers.reduce(function(sum, b){ return sum + b.length; }, 0);
         var sampleRate  = decodedBuffers[0].sampleRate;
         var numChannels = decodedBuffers[0].numberOfChannels;
         var combined    = audioCtx.createBuffer(numChannels, totalLength, sampleRate);
