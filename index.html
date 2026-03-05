@@ -90,18 +90,19 @@
   .story-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .meta-tag { padding: 4px 12px; background: white; border-radius: 50px; font-size: 0.75rem; font-weight: 700; color: #888; border: 1.5px solid #e8e0d0; }
   .story-text { font-family: 'Playfair Display',serif; font-size: 1.05rem; line-height: 1.9; color: #3a3228; margin-bottom: 32px; white-space: pre-wrap; }
-  .audio-player { background: rgba(30,26,44,0.96); border-radius: 14px; padding: 12px 16px; color: white; box-shadow: 0 2px 12px rgba(0,0,0,0.12); }
+  .audio-player { background: #fffdf7; border: 1px solid rgba(232,160,69,0.25); border-radius: 14px; padding: 14px 18px; color: var(--ink); box-shadow: 0 1px 8px rgba(26,26,46,0.07); margin-bottom: 20px; }
   .player-voice { display: none; }
-  .audio-status { font-size: 0.78rem; color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; animation: pulse 1.5s ease-in-out infinite; }
+  .audio-status { font-size: 0.75rem; color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; animation: pulse 1.5s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
   .player-controls { display: flex; align-items: center; gap: 12px; }
-  .play-btn { width: 40px; height: 40px; background: var(--gold); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: all 0.2s; flex-shrink: 0; color: var(--ink); font-weight: bold; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-  .play-btn:hover { transform: scale(1.07); box-shadow: 0 3px 14px rgba(232,160,69,0.4); }
-  .stop-btn { width: 30px; height: 30px; background: rgba(255,255,255,0.08); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; transition: all 0.2s; flex-shrink: 0; color: rgba(255,255,255,0.7); }
-  .stop-btn:hover { background: rgba(255,255,255,0.18); }
+  .play-btn { width: 38px; height: 38px; background: var(--gold); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.95rem; transition: all 0.2s; flex-shrink: 0; color: white; font-weight: bold; touch-action: manipulation; -webkit-tap-highlight-color: transparent; box-shadow: 0 2px 8px rgba(232,160,69,0.3); }
+  .play-btn:hover { transform: scale(1.07); box-shadow: 0 3px 14px rgba(232,160,69,0.45); }
+  .play-btn:disabled { opacity: 0.4; box-shadow: none; cursor: default; transform: none; }
+  .stop-btn { width: 28px; height: 28px; background: transparent; border: 1px solid rgba(26,26,46,0.15); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; transition: all 0.2s; flex-shrink: 0; color: rgba(26,26,46,0.45); }
+  .stop-btn:hover { background: rgba(26,26,46,0.06); border-color: rgba(26,26,46,0.3); color: var(--ink); }
   .progress-area { flex: 1; min-width: 0; }
-  .now-reading { font-size: 0.72rem; color: rgba(255,255,255,0.45); margin-bottom: 5px; min-height: 1em; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .progress-bar-bg { height: 3px; background: rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; }
+  .now-reading { font-size: 0.7rem; color: rgba(26,26,46,0.4); margin-bottom: 6px; min-height: 1em; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .progress-bar-bg { height: 2px; background: rgba(232,160,69,0.18); border-radius: 10px; overflow: hidden; cursor: pointer; }
   .progress-bar-fill { height: 100%; background: var(--gold); border-radius: 10px; width: 0%; transition: width 0.4s linear; }
   .new-story-btn { width: 100%; margin-top: 20px; padding: 14px; background: white; border: 2px solid #e8e0d0; border-radius: 14px; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--ink); cursor: pointer; transition: all 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   .new-story-btn:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
@@ -123,7 +124,7 @@
   .live-voice-select:focus { border-color: var(--gold); }
   .refresh-chip { border-color: var(--gold) !important; color: var(--gold) !important; }
   .refresh-chip:hover { background: #fffbf0 !important; }
-  .time-labels { display: flex; justify-content: space-between; font-size: 0.72rem; color: rgba(255,255,255,0.35); margin-top: 5px; }
+  .time-labels { display: flex; justify-content: space-between; font-size: 0.63rem; color: rgba(26,26,46,0.3); margin-top: 3px; }
 
   /* Story builder */
   .optional-tag { font-size: 0.7rem; background: var(--lavender); color: white; padding: 2px 8px; border-radius: 20px; font-family: 'Nunito',sans-serif; font-weight: 700; vertical-align: middle; margin-left: 6px; }
@@ -138,16 +139,16 @@
   .builder-input:focus { border-color: var(--lavender); }
 
   /* Player settings panel */
-  .player-settings { margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; display: flex; flex-direction: row; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .player-settings { margin-top: 10px; border-top: 1px solid rgba(232,160,69,0.15); padding-top: 10px; display: flex; flex-direction: row; gap: 10px; align-items: center; flex-wrap: wrap; }
   .player-setting-row { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 160px; }
-  .player-setting-label { font-size: 0.7rem; color: rgba(255,255,255,0.4); font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; white-space: nowrap; }
-  .live-voice-select { flex: 1; padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.07); color: white; font-family: 'Nunito',sans-serif; font-size: 0.78rem; outline: none; cursor: pointer; appearance: none; }
-  .live-voice-select option { background: #1a1a2e; color: white; }
+  .player-setting-label { font-size: 0.68rem; color: rgba(26,26,46,0.38); font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; white-space: nowrap; }
+  .live-voice-select { flex: 1; padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(26,26,46,0.14); background: white; color: var(--ink); font-family: 'Nunito',sans-serif; font-size: 0.78rem; outline: none; cursor: pointer; appearance: none; }
+  .live-voice-select option { background: white; color: var(--ink); }
   .live-voice-select:focus { border-color: var(--gold); }
   .speed-slider-wrap { flex: 1; display: flex; align-items: center; gap: 6px; }
-  .speed-tick { font-size: 0.65rem; color: rgba(255,255,255,0.28); white-space: nowrap; }
-  .speed-range { flex: 1; height: 2px; -webkit-appearance: none; background: rgba(255,255,255,0.15); border-radius: 10px; outline: none; cursor: pointer; }
-  .speed-range::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; background: var(--gold); border-radius: 50%; cursor: pointer; border: 1.5px solid rgba(255,255,255,0.2); }
+  .speed-tick { font-size: 0.63rem; color: rgba(26,26,46,0.3); white-space: nowrap; }
+  .speed-range { flex: 1; height: 2px; -webkit-appearance: none; background: rgba(232,160,69,0.2); border-radius: 10px; outline: none; cursor: pointer; }
+  .speed-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--gold); border-radius: 50%; cursor: pointer; border: 1.5px solid white; box-shadow: 0 1px 4px rgba(232,160,69,0.4); }
   .speed-value-label { font-size: 0.68rem; color: var(--gold); font-weight: 700; white-space: nowrap; min-width: 36px; text-align: right; }
 
   @media(max-width:480px){.card{padding:24px 20px}.story-card{padding:28px 20px}.style-grid{grid-template-columns:repeat(2,1fr)}.player-setting-row{flex-wrap:wrap}}
@@ -273,7 +274,7 @@
           <span class="speed-value-label" id="speedValueLabel">Normal</span>
         </div>
       </div>
-      <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(255,255,255,0.3);font-style:italic;">💡 Journey voices are most expressive. Changing voice or speed regenerates audio.</p>
+      <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Changing voice or speed regenerates audio.</p>
     </div>
     <div class="story-text" id="storyText"></div>
     <button class="new-story-btn" id="newStoryBtn" onclick="newStory()">🌙 Create Another Story</button>
