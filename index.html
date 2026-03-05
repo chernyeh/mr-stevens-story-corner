@@ -90,18 +90,18 @@
   .story-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .meta-tag { padding: 4px 12px; background: white; border-radius: 50px; font-size: 0.75rem; font-weight: 700; color: #888; border: 1.5px solid #e8e0d0; }
   .story-text { font-family: 'Playfair Display',serif; font-size: 1.05rem; line-height: 1.9; color: #3a3228; margin-bottom: 32px; white-space: pre-wrap; }
-  .audio-player { background: var(--ink); border-radius: 18px; padding: 24px; color: white; }
-  .player-voice { font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-bottom: 8px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
-  .audio-status { font-size: 0.82rem; color: var(--gold); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; animation: pulse 1.5s ease-in-out infinite; }
+  .audio-player { background: rgba(30,26,44,0.96); border-radius: 14px; padding: 12px 16px; color: white; box-shadow: 0 2px 12px rgba(0,0,0,0.12); }
+  .player-voice { display: none; }
+  .audio-status { font-size: 0.78rem; color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; animation: pulse 1.5s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-  .player-controls { display: flex; align-items: center; gap: 16px; }
-  .play-btn { width: 52px; height: 52px; background: var(--gold); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: all 0.2s; flex-shrink: 0; color: var(--ink); font-weight: bold; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-  .play-btn:hover { transform: scale(1.08); box-shadow: 0 4px 20px rgba(232,160,69,0.4); }
-  .stop-btn { width: 38px; height: 38px; background: rgba(255,255,255,0.1); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; transition: all 0.2s; flex-shrink: 0; color: white; }
-  .stop-btn:hover { background: rgba(255,255,255,0.2); }
-  .progress-area { flex: 1; }
-  .now-reading { font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-bottom: 8px; min-height: 1.2em; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .progress-bar-bg { height: 5px; background: rgba(255,255,255,0.15); border-radius: 10px; overflow: hidden; }
+  .player-controls { display: flex; align-items: center; gap: 12px; }
+  .play-btn { width: 40px; height: 40px; background: var(--gold); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: all 0.2s; flex-shrink: 0; color: var(--ink); font-weight: bold; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .play-btn:hover { transform: scale(1.07); box-shadow: 0 3px 14px rgba(232,160,69,0.4); }
+  .stop-btn { width: 30px; height: 30px; background: rgba(255,255,255,0.08); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; transition: all 0.2s; flex-shrink: 0; color: rgba(255,255,255,0.7); }
+  .stop-btn:hover { background: rgba(255,255,255,0.18); }
+  .progress-area { flex: 1; min-width: 0; }
+  .now-reading { font-size: 0.72rem; color: rgba(255,255,255,0.45); margin-bottom: 5px; min-height: 1em; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .progress-bar-bg { height: 3px; background: rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; }
   .progress-bar-fill { height: 100%; background: var(--gold); border-radius: 10px; width: 0%; transition: width 0.4s linear; }
   .new-story-btn { width: 100%; margin-top: 20px; padding: 14px; background: white; border: 2px solid #e8e0d0; border-radius: 14px; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--ink); cursor: pointer; transition: all 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   .new-story-btn:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
@@ -138,17 +138,17 @@
   .builder-input:focus { border-color: var(--lavender); }
 
   /* Player settings panel */
-  .player-settings { margin-top: 18px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; display: flex; flex-direction: column; gap: 14px; }
-  .player-setting-row { display: flex; align-items: center; gap: 10px; }
-  .player-setting-label { font-size: 0.78rem; color: rgba(255,255,255,0.5); font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; white-space: nowrap; min-width: 52px; }
-  .live-voice-select { flex: 1; padding: 8px 12px; border-radius: 10px; border: 1.5px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: white; font-family: 'Nunito',sans-serif; font-size: 0.85rem; outline: none; cursor: pointer; appearance: none; }
+  .player-settings { margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; display: flex; flex-direction: row; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .player-setting-row { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 160px; }
+  .player-setting-label { font-size: 0.7rem; color: rgba(255,255,255,0.4); font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; white-space: nowrap; }
+  .live-voice-select { flex: 1; padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.07); color: white; font-family: 'Nunito',sans-serif; font-size: 0.78rem; outline: none; cursor: pointer; appearance: none; }
   .live-voice-select option { background: #1a1a2e; color: white; }
   .live-voice-select:focus { border-color: var(--gold); }
-  .speed-slider-wrap { flex: 1; display: flex; align-items: center; gap: 8px; }
-  .speed-tick { font-size: 0.72rem; color: rgba(255,255,255,0.35); white-space: nowrap; }
-  .speed-range { flex: 1; height: 4px; -webkit-appearance: none; background: rgba(255,255,255,0.2); border-radius: 10px; outline: none; cursor: pointer; }
-  .speed-range::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: var(--gold); border-radius: 50%; cursor: pointer; border: 2px solid rgba(255,255,255,0.3); }
-  .speed-value-label { font-size: 0.75rem; color: var(--gold); font-weight: 700; white-space: nowrap; min-width: 40px; text-align: right; }
+  .speed-slider-wrap { flex: 1; display: flex; align-items: center; gap: 6px; }
+  .speed-tick { font-size: 0.65rem; color: rgba(255,255,255,0.28); white-space: nowrap; }
+  .speed-range { flex: 1; height: 2px; -webkit-appearance: none; background: rgba(255,255,255,0.15); border-radius: 10px; outline: none; cursor: pointer; }
+  .speed-range::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; background: var(--gold); border-radius: 50%; cursor: pointer; border: 1.5px solid rgba(255,255,255,0.2); }
+  .speed-value-label { font-size: 0.68rem; color: var(--gold); font-weight: 700; white-space: nowrap; min-width: 36px; text-align: right; }
 
   @media(max-width:480px){.card{padding:24px 20px}.story-card{padding:28px 20px}.style-grid{grid-template-columns:repeat(2,1fr)}.player-setting-row{flex-wrap:wrap}}
 </style>
@@ -273,7 +273,7 @@
           <span class="speed-value-label" id="speedValueLabel">Normal</span>
         </div>
       </div>
-      <p class="voice-tip" style="margin-top:12px">💡 Journey voices (Aurora, Elara, Marcus) are the most expressive for storytelling. Changing voice or speed will regenerate the audio.</p>
+      <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(255,255,255,0.3);font-style:italic;">💡 Journey voices are most expressive. Changing voice or speed regenerates audio.</p>
     </div>
     <div class="story-text" id="storyText"></div>
     <button class="new-story-btn" id="newStoryBtn" onclick="newStory()">🌙 Create Another Story</button>
@@ -296,23 +296,26 @@
   // ── VOICES ────────────────────────────────────────────────────────────────
   var VOICES = {
     en: [
-      { id: 'en-GB-Journey-F', label: 'Elara',    desc: 'Rich British female',  lang: 'en-GB' },
-      { id: 'en-US-Journey-F', label: 'Aurora',   desc: 'Warm US female',       lang: 'en-US' },
-      { id: 'en-US-Neural2-F', label: 'Clara',    desc: 'Clear US female',      lang: 'en-US' },
-      { id: 'en-GB-Neural2-A', label: 'Olivia',   desc: 'Warm British female',  lang: 'en-GB' },
-      { id: 'en-AU-Neural2-A', label: 'Matilda',  desc: 'Australian female',    lang: 'en-AU' },
-      { id: 'en-US-Journey-D', label: 'Marcus',   desc: 'Deep warm US male',    lang: 'en-US' },
-      { id: 'en-US-Neural2-D', label: 'James',    desc: 'Clear US male',        lang: 'en-US' },
-      { id: 'en-GB-Neural2-B', label: 'Edmund',   desc: 'British male',         lang: 'en-GB' },
-      { id: 'en-AU-Neural2-B', label: 'Henry',    desc: 'Australian male',      lang: 'en-AU' }
+      { id: 'en-US-Studio-O',  label: 'Sophia',   desc: 'Studio US female, warm',     lang: 'en-US' },
+      { id: 'en-GB-Journey-F', label: 'Elara',    desc: 'Journey British female',      lang: 'en-GB' },
+      { id: 'en-US-Journey-F', label: 'Aurora',   desc: 'Journey US female',           lang: 'en-US' },
+      { id: 'en-US-Journey-D', label: 'Marcus',   desc: 'Journey US male, deep',       lang: 'en-US' },
+      { id: 'en-US-Neural2-F', label: 'Clara',    desc: 'Neural2 US female',           lang: 'en-US' },
+      { id: 'en-GB-Neural2-A', label: 'Olivia',   desc: 'Neural2 British female',      lang: 'en-GB' },
+      { id: 'en-AU-Neural2-A', label: 'Matilda',  desc: 'Neural2 Australian female',   lang: 'en-AU' },
+      { id: 'en-US-Neural2-D', label: 'James',    desc: 'Neural2 US male',             lang: 'en-US' },
+      { id: 'en-GB-Neural2-B', label: 'Edmund',   desc: 'Neural2 British male',        lang: 'en-GB' },
+      { id: 'en-AU-Neural2-B', label: 'Henry',    desc: 'Neural2 Australian male',     lang: 'en-AU' }
     ],
     fr: [
-      { id: 'fr-FR-Journey-F', label: 'Camille',  desc: 'Voix Journey feminine',  lang: 'fr-FR' },
-      { id: 'fr-FR-Neural2-A', label: 'Isabelle', desc: 'Neural2 feminine',       lang: 'fr-FR' },
-      { id: 'fr-FR-Neural2-C', label: 'Margaux',  desc: 'Neural2 feminine douce', lang: 'fr-FR' },
-      { id: 'fr-FR-Journey-D', label: 'Antoine',  desc: 'Voix Journey masculine',  lang: 'fr-FR' },
-      { id: 'fr-FR-Neural2-B', label: 'Henri',    desc: 'Neural2 masculin',        lang: 'fr-FR' },
-      { id: 'fr-CA-Neural2-A', label: 'Amelie',   desc: 'Voix canadienne',         lang: 'fr-CA' }
+      { id: 'fr-FR-Studio-A',  label: 'Céleste',  desc: 'Studio féminin, chaleureux',  lang: 'fr-FR' },
+      { id: 'fr-FR-Studio-D',  label: 'Gabriel',  desc: 'Studio masculin, profond',    lang: 'fr-FR' },
+      { id: 'fr-FR-Journey-F', label: 'Camille',  desc: 'Journey féminin',             lang: 'fr-FR' },
+      { id: 'fr-FR-Journey-D', label: 'Antoine',  desc: 'Journey masculin',            lang: 'fr-FR' },
+      { id: 'fr-FR-Neural2-A', label: 'Isabelle', desc: 'Neural2 féminin',             lang: 'fr-FR' },
+      { id: 'fr-FR-Neural2-C', label: 'Margaux',  desc: 'Neural2 féminin doux',        lang: 'fr-FR' },
+      { id: 'fr-FR-Neural2-B', label: 'Henri',    desc: 'Neural2 masculin',            lang: 'fr-FR' },
+      { id: 'fr-CA-Neural2-A', label: 'Amélie',   desc: 'Neural2 voix canadienne',     lang: 'fr-CA' }
     ],
     zh: [
       { id: 'cmn-CN-Wavenet-A', label: 'Shen Hong', desc: 'WaveNet female, warm',  lang: 'cmn-CN' },
@@ -324,12 +327,12 @@
   // ── LANGUAGE CONFIG ───────────────────────────────────────────────────────
   var LANG_CONFIG = {
     en: {
-      name: 'English', defaultVoice: 'en-GB-Journey-F', defaultRate: 0.95,
+      name: 'English', defaultVoice: 'en-US-Studio-O', defaultRate: 0.95,
       promptInstruction: 'Write the entire story in English.',
       narratorNote: 'Use commas for natural spoken pauses, em-dashes for dramatic pauses. End every sentence with a full stop, exclamation mark, or question mark. Start a new paragraph for each new moment or scene shift.'
     },
     fr: {
-      name: 'French', defaultVoice: 'fr-FR-Journey-F', defaultRate: 0.78,
+      name: 'French', defaultVoice: 'fr-FR-Studio-A', defaultRate: 0.78,
       promptInstruction: 'Write the entire story in French (fr-FR). All text including the title must be in French. IMPORTANT: This is for non-native French learners. Use simplified clear grammar: short sentences of max 12 words, common A2-B1 level vocabulary, avoid subjunctive, avoid complex tenses beyond passe compose and imparfait, avoid idiomatic expressions. Write so a learner can understand every sentence when read aloud slowly.',
       narratorNote: 'Use commas for natural pauses, em-dashes for dramatic pauses. End every sentence clearly. New paragraph for each scene shift.'
     },
@@ -892,6 +895,9 @@
     var isChinese = (languageCode === 'cmn-CN');
     var isFrench  = (languageCode === 'fr-FR' || languageCode === 'fr-CA');
     var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
+    var isStudio  = voiceId.toLowerCase().indexOf('studio') !== -1;
+    // Studio voices support SSML breaks + prosody rate, but NOT prosody pitch
+    // They behave like Neural2 for our purposes but with richer voice quality
 
     function escXml(s) {
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
@@ -979,7 +985,7 @@
         return { type: 'ssml', value: '<speak>'
           + '<prosody rate="' + rate + '" pitch="' + pitch + '">'
           + s
-          + '<break time="550ms"/>'
+          + '<break time="900ms"/>'
           + '</prosody>'
           + '</speak>' };
       }
@@ -1013,7 +1019,13 @@
     } else {
       var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
-      paras.forEach(function(p){ chunks.push(paragraphSsml(p.trim())); });
+      paras.forEach(function(p, pi) {
+        chunks.push(paragraphSsml(p.trim()));
+        // For Journey voices, insert a silence gap between paragraphs
+        if (isJourney && pi < paras.length - 1) {
+          chunks.push({ type: 'silence', durationMs: 600 });
+        }
+      });
     }
 
     if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
@@ -1022,13 +1034,14 @@
     // Journey voices: slower rate, no pitch (not supported)
     // Chinese Wavenet: 5% faster
     var effectiveSpeechRate = isJourney ? speechRate * 0.82
+                            : isStudio   ? speechRate * 0.90
                             : isChinese  ? speechRate * 1.05
                             : speechRate;
 
     var audioConfig = {
       audioEncoding: 'MP3',
       speakingRate: effectiveSpeechRate,
-      pitch: isJourney ? 0.0 : -2.0,
+      pitch: (isJourney || isStudio) ? 0.0 : -2.0,
       effectsProfileId: ['headphone-class-device']
     };
 
