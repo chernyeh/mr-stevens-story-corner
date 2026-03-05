@@ -911,6 +911,16 @@
         return { type: 'text', value: title + '......' };
       }
       var t = escXml(title);
+      if (isStudio) {
+        // Studio: no pitch attribute allowed
+        return { type: 'ssml', value: '<speak>'
+          + '<break time="500ms"/>'
+          + '<prosody rate="78%">'
+          + t
+          + '</prosody>'
+          + '<break time="1700ms"/>'
+          + '</speak>' };
+      }
       return { type: 'ssml', value: '<speak>'
         + '<break time="500ms"/>'
         + '<prosody rate="78%" pitch="-1st">'
