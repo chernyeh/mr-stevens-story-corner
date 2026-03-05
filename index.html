@@ -106,6 +106,37 @@
   .progress-bar-fill { height: 100%; background: var(--gold); border-radius: 10px; width: 0%; transition: width 0.4s linear; }
   .new-story-btn { width: 100%; margin-top: 20px; padding: 14px; background: white; border: 2px solid #e8e0d0; border-radius: 14px; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--ink); cursor: pointer; transition: all 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   .new-story-btn:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
+  /* ── SAVE & LIBRARY ── */
+  .story-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .save-btn { flex: 1; padding: 13px; background: var(--gold); border: none; border-radius: 14px; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.92rem; color: white; cursor: pointer; transition: all 0.2s; touch-action: manipulation; box-shadow: 0 2px 8px rgba(232,160,69,0.3); }
+  .save-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(232,160,69,0.4); }
+  .save-btn.saved { background: var(--sage); box-shadow: 0 2px 8px rgba(122,184,160,0.3); }
+  .save-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+  .new-story-btn-small { flex: 1; padding: 13px; background: white; border: 2px solid #e8e0d0; border-radius: 14px; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.92rem; color: var(--ink); cursor: pointer; transition: all 0.2s; touch-action: manipulation; }
+  .new-story-btn-small:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
+  /* Library screen */
+  .library-screen { display: none; }
+  .library-screen.visible { display: block; animation: fadeUp 0.4s ease; }
+  .library-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .library-title { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: var(--parchment); }
+  .library-back-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 8px 16px; color: rgba(255,255,255,0.8); font-family: 'Nunito',sans-serif; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .library-back-btn:hover { background: rgba(255,255,255,0.18); }
+  .library-empty { text-align: center; padding: 60px 20px; color: rgba(255,255,255,0.35); font-size: 0.95rem; font-style: italic; }
+  .story-list { display: flex; flex-direction: column; gap: 12px; }
+  .story-item { background: var(--parchment); border-radius: 16px; padding: 18px 20px; cursor: pointer; transition: all 0.2s; border: 1.5px solid transparent; display: flex; align-items: flex-start; gap: 14px; }
+  .story-item:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.15); border-color: var(--gold); }
+  .story-item-icon { font-size: 1.6rem; flex-shrink: 0; margin-top: 2px; }
+  .story-item-body { flex: 1; min-width: 0; }
+  .story-item-title { font-family: 'Playfair Display',serif; font-size: 1rem; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+  .story-item-meta { font-size: 0.72rem; color: rgba(26,26,46,0.4); margin-bottom: 6px; }
+  .story-item-synopsis { font-size: 0.82rem; color: rgba(26,26,46,0.6); line-height: 1.5; }
+  .story-item-delete { background: none; border: none; color: rgba(26,26,46,0.25); font-size: 1rem; cursor: pointer; padding: 4px; flex-shrink: 0; transition: color 0.2s; }
+  .story-item-delete:hover { color: #e07070; }
+  /* Nav bar */
+  .nav-bar { display: flex; justify-content: center; gap: 12px; margin-bottom: 24px; }
+  .nav-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; padding: 8px 20px; color: rgba(255,255,255,0.6); font-family: 'Nunito',sans-serif; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .nav-btn:hover { background: rgba(255,255,255,0.14); color: white; }
+  .nav-btn.active { background: var(--gold); border-color: var(--gold); color: white; box-shadow: 0 2px 8px rgba(232,160,69,0.35); }
   .error-msg { background: #fff0f0; border: 1.5px solid #ffb3b3; border-radius: 12px; padding: 16px 20px; color: #c0392b; font-size: 0.9rem; margin-top: 16px; display: none; }
   .error-msg.visible { display: block; animation: fadeUp 0.3s ease; }
   /* Style picker */
@@ -163,6 +194,18 @@
     <h1>Mr Steven's<span> Story Corner</span></h1>
     <p class="tagline">Magical stories, made just for your child ✨</p>
   </header>
+
+  <div class="nav-bar">
+    <button class="nav-btn active" id="navCreate" onclick="showSection('create')">✨ Create Story</button>
+    <button class="nav-btn" id="navLibrary" onclick="showSection('library')">📚 My Library</button>
+  </div>
+
+  <div class="library-screen" id="libraryScreen">
+    <div class="library-header">
+      <div class="library-title">📚 My Library</div>
+    </div>
+    <div id="libraryList"></div>
+  </div>
 
   <div id="setupSection">
 
@@ -277,7 +320,10 @@
       <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Changing voice or speed regenerates audio.</p>
     </div>
     <div class="story-text" id="storyText"></div>
-    <button class="new-story-btn" id="newStoryBtn" onclick="newStory()">🌙 Create Another Story</button>
+    <div class="story-actions">
+      <button class="save-btn" id="saveBtn" onclick="saveStory()">🌟 Save Story</button>
+      <button class="new-story-btn-small" id="newStoryBtn" onclick="newStory()">🌙 New Story</button>
+    </div>
   </div>
 
 <script>
@@ -822,6 +868,8 @@
       return res.json();
     }).then(function(data) {
       document.getElementById('loadingCard').classList.remove('visible');
+      var saveBtn = document.getElementById('saveBtn');
+      if (saveBtn) { saveBtn.textContent = '🌟 Save Story'; saveBtn.classList.remove('saved'); saveBtn.disabled = false; }
       document.getElementById('storyTitle').textContent   = 'Writing your story...';
       document.getElementById('storyText').textContent    = '';
       document.getElementById('storyMeta').innerHTML      = '';
@@ -1236,6 +1284,9 @@
     document.getElementById('storyCard').classList.remove('visible');
     document.getElementById('setupSection').style.display = 'block';
     selectedAge = null; selectedStyle = null; fullStoryText = '';
+    // Reset save button
+    var saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) { saveBtn.textContent = '🌟 Save Story'; saveBtn.classList.remove('saved'); saveBtn.disabled = false; }
     builderSelections = { character: '', setting: '', twist: '', ending: '' };
     document.querySelectorAll('.age-pill').forEach(function(p) { p.classList.remove('selected'); });
     document.getElementById('themeInput').value = '';
@@ -1293,6 +1344,172 @@
     document.addEventListener('DOMContentLoaded', initEvents);
   } else {
     initEvents();
+  }
+
+  // ── LIBRARY ───────────────────────────────────────────────────────────────
+  var LIBRARY_KEY = 'mrStevens_library';
+
+  function loadLibrary() {
+    try { return JSON.parse(localStorage.getItem(LIBRARY_KEY) || '[]'); }
+    catch(e) { return []; }
+  }
+
+  function saveLibrary(lib) {
+    try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(lib)); } catch(e) {}
+  }
+
+  function getSynopsis(text) {
+    // First 120 chars of story body, trimmed to a word boundary
+    var s = text.replace(/\n/g, ' ').trim().substring(0, 130);
+    var last = s.lastIndexOf(' ');
+    if (last > 80) s = s.substring(0, last);
+    return s + '…';
+  }
+
+  function getStoryEmoji(style, lang) {
+    if (lang === 'zh') return '🐉';
+    var emojis = { 'Milne': '🐻', 'Dahl': '🍫', 'Tolkien': '🧙', 'Andersen': '❄️',
+                   'Grimm': '🏰', 'Seuss': '🎩', 'Potter': '🦔', 'Kipling': '🐯',
+                   'Baum': '🌈', 'Carroll': '🐇' };
+    if (style && style.author) {
+      for (var k in emojis) { if (style.author.indexOf(k) !== -1) return emojis[k]; }
+    }
+    return '⭐';
+  }
+
+  function saveStory() {
+    var btn = document.getElementById('saveBtn');
+    if (btn.classList.contains('saved')) return;
+    var title = document.getElementById('storyTitle').textContent;
+    var text  = document.getElementById('storyText').textContent;
+    if (!title || !text) return;
+    var lib = loadLibrary();
+    var entry = {
+      id:       Date.now(),
+      title:    title,
+      text:     text,
+      synopsis: getSynopsis(text),
+      lang:     selectedLang,
+      age:      selectedAge,
+      style:    selectedStyle,
+      voiceId:  document.getElementById('liveVoiceSelect').value,
+      savedAt:  new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
+    };
+    lib.unshift(entry); // newest first
+    if (lib.length > 50) lib = lib.slice(0, 50); // cap at 50 stories
+    saveLibrary(lib);
+    btn.textContent = '✅ Saved!';
+    btn.classList.add('saved');
+    btn.disabled = true;
+  }
+
+  function deleteStory(id, e) {
+    e.stopPropagation();
+    var lib = loadLibrary().filter(function(s) { return s.id !== id; });
+    saveLibrary(lib);
+    renderLibrary();
+  }
+
+  function renderLibrary() {
+    var lib = loadLibrary();
+    var container = document.getElementById('libraryList');
+    if (!lib.length) {
+      container.innerHTML = '<div class="library-empty">No saved stories yet.<br>Generate a story and tap 🌟 Save Story!</div>';
+      return;
+    }
+    container.innerHTML = lib.map(function(s) {
+      var emoji = getStoryEmoji(s.style, s.lang);
+      var meta  = [s.savedAt, s.age ? 'Age ' + s.age : '', s.style ? s.style.author : ''].filter(Boolean).join(' · ');
+      return '<div class="story-item" onclick="openSavedStory(' + s.id + ')">'
+        + '<div class="story-item-icon">' + emoji + '</div>'
+        + '<div class="story-item-body">'
+        +   '<div class="story-item-title">' + escHtml(s.title) + '</div>'
+        +   '<div class="story-item-meta">' + escHtml(meta) + '</div>'
+        +   '<div class="story-item-synopsis">' + escHtml(s.synopsis) + '</div>'
+        + '</div>'
+        + '<button class="story-item-delete" onclick="deleteStory(' + s.id + ', event)" title="Remove">✕</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function openSavedStory(id) {
+    var lib = loadLibrary();
+    var story = null;
+    for (var i = 0; i < lib.length; i++) { if (lib[i].id === id) { story = lib[i]; break; } }
+    if (!story) return;
+
+    // Restore state
+    selectedLang  = story.lang  || 'en';
+    selectedAge   = story.age   || 5;
+    selectedStyle = story.style || null;
+
+    // Switch to story card view
+    showSection('create');
+    document.getElementById('setupSection').style.display = 'none';
+    document.getElementById('loadingCard').classList.remove('visible');
+
+    // Populate story card
+    document.getElementById('storyTitle').textContent = story.title;
+    document.getElementById('storyText').textContent  = story.text;
+    fullStoryText = story.text;
+    document.getElementById('storyMeta').innerHTML =
+      (story.age   ? '<span class="meta-tag">Age ' + story.age + '</span>' : '') +
+      (story.style ? '<span class="meta-tag">Style of ' + story.style.author + '</span>' : '') +
+      '<span class="meta-tag">Saved story</span>';
+    document.getElementById('storyCard').classList.add('visible');
+
+    // Reset save button (already saved)
+    var saveBtn = document.getElementById('saveBtn');
+    saveBtn.textContent = '✅ Saved';
+    saveBtn.classList.add('saved');
+    saveBtn.disabled = true;
+
+    // Set voice selector to saved voice
+    populateVoiceSelector();
+    var vs = document.getElementById('liveVoiceSelect');
+    if (story.voiceId) {
+      for (var j = 0; j < vs.options.length; j++) {
+        if (vs.options[j].value === story.voiceId) { vs.selectedIndex = j; break; }
+      }
+    }
+
+    // Trigger narration
+    setAudioLoading(true);
+    document.getElementById('nowReading').textContent = 'Preparing narration…';
+    document.getElementById('playBtn').disabled = true;
+    document.getElementById('playBtn').style.opacity = '0.4';
+    var voice = VOICES[selectedLang].find(function(v){ return v.id === story.voiceId; })
+             || VOICES[selectedLang][0];
+    generateGoogleAudio(story.text, voice.id, voice.lang, story.title)
+      .then(function() {
+        setAudioLoading(false);
+        document.getElementById('playBtn').disabled = false;
+        document.getElementById('playBtn').style.opacity = '1';
+      })
+      .catch(function(err) {
+        setAudioLoading(false);
+        showError('Audio failed: ' + err.message);
+      });
+  }
+
+  function showSection(section) {
+    var isLibrary = section === 'library';
+    document.getElementById('libraryScreen').classList.toggle('visible', isLibrary);
+    document.getElementById('navCreate').classList.toggle('active', !isLibrary);
+    document.getElementById('navLibrary').classList.toggle('active', isLibrary);
+    if (isLibrary) {
+      // Hide story/setup while in library
+      document.getElementById('storyCard').classList.remove('visible');
+      document.getElementById('setupSection').style.display = 'none';
+      document.getElementById('loadingCard').classList.remove('visible');
+      renderLibrary();
+    } else {
+      document.getElementById('setupSection').style.display = 'block';
+    }
   }
 
 </script>
