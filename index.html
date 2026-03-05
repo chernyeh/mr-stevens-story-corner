@@ -977,16 +977,28 @@
       } else {
         // Neural2/Wavenet: full prosody + breaks
         var s = escXml(para);
-        // Dialogue in curly quotes - slightly higher pitch
-        s = s.replace(/\u201c([^"]*)\u201d/g,
-          '<prosody pitch="+1.2st" rate="98%">\u201c$1\u201d</prosody>');
+        // Dialogue in curly quotes - slight pitch lift (not for Studio, which bans pitch)
+        if (!isStudio) {
+          s = s.replace(/\u201c([^"]*)\u201d/g,
+            '<prosody pitch="+1.2st" rate="98%">\u201c$1\u201d</prosody>');
+        }
         s = addBreaks(s);
         var rate = isFrench ? '91%' : '88%';
+        var pauseMs = isStudio ? '1200ms' : '900ms';
+        if (isStudio) {
+          // Studio: rate only, no pitch attribute
+          return { type: 'ssml', value: '<speak>'
+            + '<prosody rate="' + rate + '">'
+            + s
+            + '<break time="' + pauseMs + '"/>'
+            + '</prosody>'
+            + '</speak>' };
+        }
         var pitch = isFrench ? '-0.5st' : '-1st';
         return { type: 'ssml', value: '<speak>'
           + '<prosody rate="' + rate + '" pitch="' + pitch + '">'
           + s
-          + '<break time="900ms"/>'
+          + '<break time="' + pauseMs + '"/>'
           + '</prosody>'
           + '</speak>' };
       }
