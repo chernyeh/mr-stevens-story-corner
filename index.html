@@ -1389,7 +1389,29 @@
   }
 
   function saveLibrary(lib) {
-    try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(lib)); } catch(e) {}
+    try {
+      localStorage.setItem(LIBRARY_KEY, JSON.stringify(lib));
+      return true;
+    } catch(e) {
+      // Storage full - trim oldest story and retry
+      if (lib.length > 1) {
+        lib.pop();
+        return saveLibrary(lib);
+      }
+      return false;
+    }
+  }
+
+  function getStorageUsage() {
+    try {
+      var data = localStorage.getItem(LIBRARY_KEY) || '[]';
+      var bytes = new Blob([data]).size;
+      var kb = Math.round(bytes / 1024);
+      var stories = JSON.parse(data).length;
+      var maxKb = 5000;
+      var pct = Math.min(100, Math.round((kb / maxKb) * 100));
+      return { kb: kb, stories: stories, maxKb: maxKb, pct: pct };
+    } catch(e) { return { kb: 0, stories: 0, maxKb: 5000, pct: 0 }; }
   }
 
   function getSynopsis(text) {
@@ -1430,11 +1452,19 @@
       savedAt:  new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
     };
     lib.unshift(entry); // newest first
-    if (lib.length > 50) lib = lib.slice(0, 50); // cap at 50 stories
-    saveLibrary(lib);
-    btn.textContent = '✅ Saved!';
-    btn.classList.add('saved');
-    btn.disabled = true;
+    var ok = saveLibrary(lib);
+    if (ok) {
+      btn.textContent = '✅ Saved!';
+      btn.classList.add('saved');
+      btn.disabled = true;
+      var usage = getStorageUsage();
+      if (usage.pct >= 80) {
+        showError('Library is ' + usage.pct + '% full (' + usage.kb + 'KB of ~5000KB used). Consider deleting older stories.');
+      }
+    } else {
+      btn.textContent = '⚠️ Storage Full';
+      showError('Could not save — device storage is full. Please delete some older stories from My Library to make room.');
+    }
   }
 
   function deleteStory(id, e) {
@@ -1447,11 +1477,14 @@
   function renderLibrary() {
     var lib = loadLibrary();
     var container = document.getElementById('libraryList');
+    var usage = getStorageUsage();
+    var usageBar = '<div style="font-size:0.72rem;color:rgba(255,255,255,0.35);text-align:right;margin-bottom:12px;">'
+      + '📚 ' + usage.stories + ' ' + (usage.stories === 1 ? 'story' : 'stories') + ' saved · ' + usage.kb + ' KB used</div>';
     if (!lib.length) {
       container.innerHTML = '<div class="library-empty">No saved stories yet.<br>Generate a story and tap 🌟 Save Story!</div>';
       return;
     }
-    container.innerHTML = lib.map(function(s) {
+    container.innerHTML = usageBar + lib.map(function(s) {
       var emoji = getStoryEmoji(s.style, s.lang);
       var meta  = [s.savedAt, s.age ? 'Age ' + s.age : '', s.style ? s.style.author : ''].filter(Boolean).join(' · ');
       return '<div class="story-item" onclick="openSavedStory(' + s.id + ')">'
