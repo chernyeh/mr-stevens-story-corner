@@ -1024,11 +1024,13 @@
 
     generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress)
       .then(function(url) {
-        if (btn)  { btn.disabled = false; btn.textContent = '🎙️ Load Narration'; }
         if (lnr)  { lnr.style.display = 'none'; }
         var pc = document.getElementById('playerControls');
         if (pc) { pc.style.display = 'flex'; }
         setupAudioPlayer(url);
+        var playBtn = document.getElementById('playBtn');
+        if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
+        document.getElementById('nowReading').textContent = 'Ready — press play ▶';
       })
       .catch(function(err) {
         if (btn) { btn.disabled = false; btn.textContent = '⚠️ Failed — tap to retry'; }
@@ -1277,7 +1279,9 @@
       }).then(function(decoded) {
         decodedBuffers.push(decoded);
         if (typeof onProgress === 'function') {
-          onProgress(decodedBuffers.length, chunks.filter(function(c){ return c.type !== 'silence'; }).length);
+          var textChunks = chunks.filter(function(c){ return c.type !== 'silence'; });
+          var doneText   = chunks.slice(0, index + 1).filter(function(c){ return c.type !== 'silence'; }).length;
+          onProgress(Math.min(doneText, textChunks.length), textChunks.length);
         }
         return fetchAndDecode(index + 1);
       });
