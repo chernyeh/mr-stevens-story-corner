@@ -1096,6 +1096,13 @@
 
     // Add punctuation-aware breaks to a text string
     function addBreaks(s) {
+      // Protect common abbreviations from being treated as sentence ends
+      s = s.replace(/\bMr\.\s/g,  'Mr§ ');
+      s = s.replace(/\bMrs\.\s/g, 'Mrs§ ');
+      s = s.replace(/\bMs\.\s/g,  'Ms§ ');
+      s = s.replace(/\bDr\.\s/g,  'Dr§ ');
+      s = s.replace(/\bProf\.\s/g,'Prof§ ');
+      s = s.replace(/\bSt\.\s/g,  'St§ ');
       s = s.replace(/\u2014/g, '<break time="300ms"/>');
       // Full stop - longer pause
       s = s.replace(/\.\s+/g, '.<break time="450ms"/> ');
@@ -1111,6 +1118,13 @@
       s = s.replace(/\.\.\.\s*/g, '...<break time="500ms"/> ');
       // New line within paragraph
       s = s.replace(/\n/g, '<break time="300ms"/>');
+      // Restore protected abbreviations with a tiny breath, not a sentence pause
+      s = s.replace(/Mr§/g,   'Mr.<break time="80ms"/>');
+      s = s.replace(/Mrs§/g,  'Mrs.<break time="80ms"/>');
+      s = s.replace(/Ms§/g,   'Ms.<break time="80ms"/>');
+      s = s.replace(/Dr§/g,   'Dr.<break time="80ms"/>');
+      s = s.replace(/Prof§/g, 'Prof.<break time="80ms"/>');
+      s = s.replace(/St§/g,   'St.<break time="80ms"/>');
       return s;
     }
 
@@ -1131,8 +1145,14 @@
           + '</prosody></speak>' };
       } else if (isJourney) {
         // Journey voices: plain text only
-        // Punctuation tricks: ellipses force pauses, commas add micro-pauses
         var s = para;
+        // Protect abbreviations before full-stop replacement
+        s = s.replace(/\bMr\.\s/g,   'Mr§ ');
+        s = s.replace(/\bMrs\.\s/g,  'Mrs§ ');
+        s = s.replace(/\bMs\.\s/g,   'Ms§ ');
+        s = s.replace(/\bDr\.\s/g,   'Dr§ ');
+        s = s.replace(/\bProf\.\s/g, 'Prof§ ');
+        s = s.replace(/\bSt\.\s/g,   'St§ ');
         // Sentence endings - long pause via ellipsis
         s = s.replace(/\.\s+/g, '...   ');
         // Question marks - medium pause + preserve inflection
@@ -1147,6 +1167,13 @@
         s = s.replace(/\u2014/g, ',  ');
         // Ellipsis already in text - extend it
         s = s.replace(/\.\.\.\s*/g, '......  ');
+        // Restore abbreviations with just a space (no long pause)
+        s = s.replace(/Mr§/g,   'Mr. ');
+        s = s.replace(/Mrs§/g,  'Mrs. ');
+        s = s.replace(/Ms§/g,   'Ms. ');
+        s = s.replace(/Dr§/g,   'Dr. ');
+        s = s.replace(/Prof§/g, 'Prof. ');
+        s = s.replace(/St§/g,   'St. ');
         return { type: 'text', value: s };
       } else {
         // Neural2/Wavenet: full prosody + breaks
@@ -1213,6 +1240,29 @@
           chunks.push({ type: 'silence', durationMs: 600 });
         }
       });
+    }
+
+    // ── "The End" finale ────────────────────────────────────────────────────
+    if (isJourney) {
+      chunks.push({ type: 'silence', durationMs: 1200 });
+      chunks.push({ type: 'text', value: '......  The End.' });
+    } else if (isStudio) {
+      chunks.push({ type: 'silence', durationMs: 800 });
+      chunks.push({ type: 'ssml', value: '<speak>'
+        + '<break time="1200ms"/>'
+        + '<prosody rate="72%">'
+        + 'The End.'
+        + '</prosody>'
+        + '</speak>' });
+    } else {
+      chunks.push({ type: 'silence', durationMs: 800 });
+      var theEndPitch = isChinese ? '-1st' : '-2st';
+      chunks.push({ type: 'ssml', value: '<speak>'
+        + '<break time="1200ms"/>'
+        + '<prosody rate="72%" pitch="' + theEndPitch + '">'
+        + 'The End.'
+        + '</prosody>'
+        + '</speak>' });
     }
 
     if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
