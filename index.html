@@ -1108,6 +1108,11 @@
       s = s.replace(/\bDr\.\s/g,  'Dr§ ');
       s = s.replace(/\bProf\.\s/g,'Prof§ ');
       s = s.replace(/\bSt\.\s/g,  'St§ ');
+      // Protect dotted acronyms (U.S. U.K. etc.) so internal dots don't cause sentence breaks
+      s = s.replace(/U\.S\./g, 'U§S§');
+      s = s.replace(/U\.K\./g, 'U§K§');
+      s = s.replace(/E\.U\./g, 'E§U§');
+      s = s.replace(/U\.N\./g, 'U§N§');
       s = s.replace(/\u2014/g, '<break time="300ms"/>');
       // Full stop - longer pause
       s = s.replace(/\.\s+/g, '.<break time="450ms"/> ');
@@ -1130,6 +1135,11 @@
       s = s.replace(/Dr§/g,   'Dr.<break time="80ms"/>');
       s = s.replace(/Prof§/g, 'Prof.<break time="80ms"/>');
       s = s.replace(/St§/g,   'St.<break time="80ms"/>');
+      // Restore dotted acronyms (no extra pause between letters)
+      s = s.replace(/U§S§/g, 'U.S.');
+      s = s.replace(/U§K§/g, 'U.K.');
+      s = s.replace(/E§U§/g, 'E.U.');
+      s = s.replace(/U§N§/g, 'U.N.');
       return s;
     }
 
@@ -1188,6 +1198,11 @@
         s = s.replace(/\bDr\.\s/g,   'Dr§ ');
         s = s.replace(/\bProf\.\s/g, 'Prof§ ');
         s = s.replace(/\bSt\.\s/g,   'St§ ');
+        // Protect dotted acronyms
+        s = s.replace(/U\.S\./g, 'U§S§');
+        s = s.replace(/U\.K\./g, 'U§K§');
+        s = s.replace(/E\.U\./g, 'E§U§');
+        s = s.replace(/U\.N\./g, 'U§N§');
         // Sentence endings - long pause via ellipsis
         s = s.replace(/\.\s+/g, '...   ');
         // Question marks - medium pause + preserve inflection
@@ -1209,6 +1224,11 @@
         s = s.replace(/Dr§/g,   'Dr. ');
         s = s.replace(/Prof§/g, 'Prof. ');
         s = s.replace(/St§/g,   'St. ');
+        // Restore dotted acronyms
+        s = s.replace(/U§S§/g, 'U.S.');
+        s = s.replace(/U§K§/g, 'U.K.');
+        s = s.replace(/E§U§/g, 'E.U.');
+        s = s.replace(/U§N§/g, 'U.N.');
         return { type: 'text', value: s };
       } else {
         // Neural2/Wavenet/Studio: full prosody + breaks
