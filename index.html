@@ -353,6 +353,7 @@
   var currentAudio  = null;
   var pendingNarrationVoice = null;
   var pendingNarrationTitle = '';
+  var narrationAbortController = null;
   var builderSelections = { character: '', setting: '', twist: '', ending: '' };
 
   // ── VOICES ────────────────────────────────────────────────────────────────
@@ -988,62 +989,62 @@
       '<span class="meta-tag">' + minutes + ' min</span>' +
       '<span class="meta-tag">' + cfg.name + '</span>' +
       '<span class="meta-tag">Style of ' + selectedStyle.author + '</span>';
-    // Store voice info for on-demand narration
+    // Store voice info and auto-start narration
     pendingNarrationVoice = voice;
     pendingNarrationTitle = storyTitle || '';
-    // Show load button, hide player controls
-    var lnr = document.getElementById('loadNarrationRow');
-    var pc  = document.getElementById('playerControls');
     var ast = document.getElementById('audioStatus');
-    if (lnr) { lnr.style.display = 'block'; }
-    if (pc)  { pc.style.display  = 'none';  }
-    if (ast) { ast.style.display = 'none';  }
-    var btn = document.getElementById('loadNarrationBtn');
-    if (btn) { btn.disabled = false; btn.textContent = '🎙️ Load Narration'; }
+    if (ast) { ast.style.display = 'none'; }
+    loadNarration();
   }
 
-  // ── LOAD NARRATION (on-demand) ───────────────────────────────────────────
+  // ── LOAD NARRATION (auto-starts; cancels any in-progress load) ──────────
   function loadNarration() {
     if (!pendingNarrationVoice || !fullStoryText) return;
-    var btn = document.getElementById('loadNarrationBtn');
-    var lnr = document.getElementById('loadNarrationRow');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Loading narration…'; }
+    if (narrationAbortController) { narrationAbortController.abort(); }
+    narrationAbortController = new AbortController();
+    var signal = narrationAbortController.signal;
 
-    // Count text chunks to estimate progress
-    var voice     = pendingNarrationVoice;
+    var voice      = pendingNarrationVoice;
     var storyTitle = pendingNarrationTitle;
-    var text      = fullStoryText;
+    var text       = fullStoryText;
 
-    // Estimate: ~1.2s per API call, figure out rough chunk count from paragraphs
-    var paragraphs   = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
-    var totalChunks  = paragraphs.length + 2; // +title +1 buffer
-    var loadedChunks = 0;
-    var startTime    = Date.now();
+    // Show player controls in a loading state immediately
+    var lnr     = document.getElementById('loadNarrationRow');
+    var pc      = document.getElementById('playerControls');
+    var playBtn = document.getElementById('playBtn');
+    if (lnr)     { lnr.style.display = 'none'; }
+    if (pc)      { pc.style.display  = 'flex'; }
+    if (playBtn) { playBtn.disabled = true; playBtn.style.opacity = '0.4'; }
+    document.getElementById('nowReading').textContent = '🎙️ Loading narration…';
 
+    var startTime = Date.now();
     function updateProgress(done, total) {
-      loadedChunks = done;
-      var pct  = total > 0 ? Math.round(done / total * 100) : 0;
-      var elapsed = (Date.now() - startTime) / 1000;
+      var pct       = total > 0 ? Math.round(done / total * 100) : 0;
+      var elapsed   = (Date.now() - startTime) / 1000;
       var remaining = done > 0 ? Math.round((elapsed / done) * (total - done)) : null;
-      var remStr = remaining !== null
-        ? (remaining <= 1 ? 'almost done…' : 'about ' + remaining + 's remaining')
-        : 'estimating…';
-      if (btn) btn.textContent = '⏳ ' + pct + '% — ' + remStr;
+      var remStr    = remaining !== null
+        ? (remaining <= 1 ? ' — almost done…' : ' — about ' + remaining + 's left')
+        : '…';
+      document.getElementById('nowReading').textContent = '🎙️ Loading ' + pct + '%' + remStr;
     }
 
-    generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress)
+    generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal)
       .then(function(url) {
-        if (lnr)  { lnr.style.display = 'none'; }
-        var pc = document.getElementById('playerControls');
-        if (pc) { pc.style.display = 'flex'; }
+        narrationAbortController = null;
         setupAudioPlayer(url);
-        var playBtn = document.getElementById('playBtn');
         if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
-        document.getElementById('nowReading').textContent = 'Ready — press play ▶';
+        document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
       })
       .catch(function(err) {
-        if (btn) { btn.disabled = false; btn.textContent = '⚠️ Failed — tap to retry'; }
-        document.getElementById('nowReading').textContent = 'Error: ' + err.message;
+        narrationAbortController = null;
+        if (err.name === 'AbortError') return;
+        if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
+        document.getElementById('nowReading').textContent = '⚠️ Audio failed — change voice or retry';
+        if (lnr) {
+          lnr.style.display = 'block';
+          var btn = document.getElementById('loadNarrationBtn');
+          if (btn) { btn.disabled = false; btn.textContent = '🔄 Retry narration'; }
+        }
       });
   }
 
@@ -1056,13 +1057,11 @@
   }
 
   // ── GOOGLE TTS ────────────────────────────────────────────────────────────
-  function generateGoogleAudio(text, voiceId, languageCode, storyTitle, onProgress) {
+  function generateGoogleAudio(text, voiceId, languageCode, storyTitle, onProgress, signal) {
     var isChinese = (languageCode === 'cmn-CN');
     var isFrench  = (languageCode === 'fr-FR' || languageCode === 'fr-CA');
     var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
     var isStudio  = voiceId.toLowerCase().indexOf('studio') !== -1;
-    // Studio voices support SSML breaks + prosody rate, but NOT prosody pitch
-    // They behave like Neural2 for our purposes but with richer voice quality
 
     function escXml(s) {
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
@@ -1071,26 +1070,24 @@
     // Title - read like a narrator announcing the story name
     function titleChunk(title) {
       if (isJourney) {
-        // Journey voices: plain text only - long pause after title (double sentence pause)
         return { type: 'text', value: title + '......' };
       }
       var t = escXml(title);
       if (isStudio) {
-        // Studio: no pitch attribute allowed
         return { type: 'ssml', value: '<speak>'
           + '<break time="500ms"/>'
-          + '<prosody rate="78%">'
-          + t
+          + '<prosody rate="75%">'
+          + '<emphasis level="moderate">' + t + '</emphasis>'
           + '</prosody>'
-          + '<break time="1700ms"/>'
+          + '<break time="1800ms"/>'
           + '</speak>' };
       }
       return { type: 'ssml', value: '<speak>'
         + '<break time="500ms"/>'
-        + '<prosody rate="78%" pitch="-1st">'
-        + t
+        + '<prosody rate="75%" pitch="-1st">'
+        + '<emphasis level="moderate">' + t + '</emphasis>'
         + '</prosody>'
-        + '<break time="1700ms"/>'
+        + '<break time="1800ms"/>'
         + '</speak>' };
     }
 
@@ -1121,20 +1118,20 @@
       // Exclamation mark - sharp pause
       s = s.replace(/!\s+/g, '!<break time="380ms"/> ');
       // Comma - short breath
-      s = s.replace(/,\s+/g, ',<break time="200ms"/> ');
+      s = s.replace(/,\s+/g, ',<break time="250ms"/> ');
       // Semicolon - mid pause
       s = s.replace(/;\s+/g, ';<break time="280ms"/> ');
       // Ellipsis - thoughtful pause
       s = s.replace(/\.\.\.\s*/g, '...<break time="500ms"/> ');
       // New line within paragraph
       s = s.replace(/\n/g, '<break time="300ms"/>');
-      // Restore protected abbreviations with a tiny breath, not a sentence pause
-      s = s.replace(/Mr§/g,   'Mr.<break time="80ms"/>');
-      s = s.replace(/Mrs§/g,  'Mrs.<break time="80ms"/>');
-      s = s.replace(/Ms§/g,   'Ms.<break time="80ms"/>');
-      s = s.replace(/Dr§/g,   'Dr.<break time="80ms"/>');
-      s = s.replace(/Prof§/g, 'Prof.<break time="80ms"/>');
-      s = s.replace(/St§/g,   'St.<break time="80ms"/>');
+      // Restore abbreviations as spoken words — no period means no sentence-break ambiguity
+      s = s.replace(/Mr§/g,   'Mister<break time="80ms"/>');
+      s = s.replace(/Mrs§/g,  'Missus<break time="80ms"/>');
+      s = s.replace(/Ms§/g,   'Miss<break time="80ms"/>');
+      s = s.replace(/Dr§/g,   'Doctor<break time="80ms"/>');
+      s = s.replace(/Prof§/g, 'Professor<break time="80ms"/>');
+      s = s.replace(/St§/g,   'Saint<break time="80ms"/>');
       // Restore dotted acronyms (no extra pause between letters)
       s = s.replace(/U§S§/g, 'U.S.');
       s = s.replace(/U§K§/g, 'U.K.');
@@ -1168,100 +1165,90 @@
       return s;
     }
 
-    function paragraphSsml(para) {
-      if (isChinese) {
-        var marked = '';
-        for (var ci = 0; ci < para.length; ci++) {
-          marked += escXml(para[ci]);
-          var c = para[ci];
-          if (c === '\u3002') marked += '<break time="480ms"/>';
-          else if (c === '\uff01') marked += '<break time="400ms"/>';
-          else if (c === '\uff1f') marked += '<break time="420ms"/>';
-          else if (c === '\uff0c' || c === '\u3001') marked += '<break time="220ms"/>';
-        }
-        return { type: 'ssml', value: '<speak><prosody rate="88%" pitch="-0.5st">'
-          + marked
-          + '<break time="500ms"/>'
-          + '</prosody></speak>' };
-      } else if (isJourney) {
-        // Journey voices: plain text only
-        var s = para;
-        // Expand acronyms so TTS spells them
-        s = s.replace(/\bUS\b/g, 'U.S.');
-        s = s.replace(/\bUK\b/g, 'U.K.');
-        s = s.replace(/\bEU\b/g, 'E.U.');
-        s = s.replace(/\bUN\b/g, 'U.N.');
-        // Protect abbreviations before full-stop replacement
-        s = s.replace(/\bMr\.\s/g,   'Mr§ ');
-        s = s.replace(/\bMrs\.\s/g,  'Mrs§ ');
-        s = s.replace(/\bMs\.\s/g,   'Ms§ ');
-        s = s.replace(/\bDr\.\s/g,   'Dr§ ');
-        s = s.replace(/\bProf\.\s/g, 'Prof§ ');
-        s = s.replace(/\bSt\.\s/g,   'St§ ');
-        // Protect dotted acronyms
-        s = s.replace(/U\.S\./g, 'U§S§');
-        s = s.replace(/U\.K\./g, 'U§K§');
-        s = s.replace(/E\.U\./g, 'E§U§');
-        s = s.replace(/U\.N\./g, 'U§N§');
-        // Sentence endings - long pause via ellipsis
-        s = s.replace(/\.\s+/g, '...   ');
-        // Question marks - medium pause + preserve inflection
-        s = s.replace(/\?\s+/g, '?..   ');
-        // Exclamation - sharp then pause
-        s = s.replace(/!\s+/g, '!..   ');
-        // Comma - keep comma, add extra space for breath
-        s = s.replace(/,\s+/g, ',  ');
-        // Semicolon - treat like a longer comma
-        s = s.replace(/;\s+/g, ',...  ');
-        // Em-dash - comma pause
-        s = s.replace(/\u2014/g, ',  ');
-        // Ellipsis already in text - extend it
-        s = s.replace(/\.\.\.\s*/g, '......  ');
-        // Restore abbreviations with just a space (no long pause)
-        s = s.replace(/Mr§/g,   'Mr. ');
-        s = s.replace(/Mrs§/g,  'Mrs. ');
-        s = s.replace(/Ms§/g,   'Ms. ');
-        s = s.replace(/Dr§/g,   'Dr. ');
-        s = s.replace(/Prof§/g, 'Prof. ');
-        s = s.replace(/St§/g,   'St. ');
-        // Restore dotted acronyms
-        s = s.replace(/U§S§/g, 'U.S.');
-        s = s.replace(/U§K§/g, 'U.K.');
-        s = s.replace(/E§U§/g, 'E.U.');
-        s = s.replace(/U§N§/g, 'U.N.');
-        return { type: 'text', value: s };
-      } else {
-        // Neural2/Wavenet/Studio: full prosody + breaks
-        // wrapDialogue must run on raw text BEFORE escXml mangles the curly quotes
-        var raw = wrapDialogue(escXml(para));
-        var s = addBreaks(raw);
-        var rate = isFrench ? '91%' : '88%';
-        var pauseMs = isStudio ? '1200ms' : '900ms';
-        if (isStudio) {
-          // Studio: rate only, no pitch attribute
-          return { type: 'ssml', value: '<speak>'
-            + '<prosody rate="' + rate + '">'
-            + s
-            + '<break time="' + pauseMs + '"/>'
-            + '</prosody>'
-            + '</speak>' };
-        }
-        var pitch = isFrench ? '-0.5st' : '-1st';
-        return { type: 'ssml', value: '<speak>'
-          + '<prosody rate="' + rate + '" pitch="' + pitch + '">'
-          + s
-          + '<break time="' + pauseMs + '"/>'
-          + '</prosody>'
-          + '</speak>' };
-      }
+    // Returns inner SSML content for one paragraph (no <speak> wrapper)
+    function paragraphInnerSsml(para) {
+      var raw = wrapDialogue(escXml(para));
+      return addBreaks(raw);
     }
 
-    // ── Split into chunks ───────────────────────────────────────────────────
+    // Builds one merged SSML chunk from a group of paragraphs
+    function buildSsmlChunk(paraGroup) {
+      var rate    = isFrench ? '91%' : '88%';
+      var pauseMs = isStudio ? '1200ms' : '900ms';
+      var inner   = paraGroup.map(paragraphInnerSsml).join('<break time="1200ms"/>');
+      if (isStudio) {
+        return { type: 'ssml', value: '<speak><prosody rate="' + rate + '">'
+          + inner + '<break time="' + pauseMs + '"/></prosody></speak>' };
+      }
+      var pitch = isFrench ? '-0.5st' : '-1st';
+      return { type: 'ssml', value: '<speak><prosody rate="' + rate + '" pitch="' + pitch + '">'
+        + inner + '<break time="' + pauseMs + '"/></prosody></speak>' };
+    }
+
+    // Processes one paragraph's text for Journey voices (plain text with pause tricks)
+    function processJourneyText(para) {
+      var s = para;
+      s = s.replace(/\bUS\b/g, 'U.S.');
+      s = s.replace(/\bUK\b/g, 'U.K.');
+      s = s.replace(/\bEU\b/g, 'E.U.');
+      s = s.replace(/\bUN\b/g, 'U.N.');
+      s = s.replace(/\bMr\.\s/g,   'Mr§ ');
+      s = s.replace(/\bMrs\.\s/g,  'Mrs§ ');
+      s = s.replace(/\bMs\.\s/g,   'Ms§ ');
+      s = s.replace(/\bDr\.\s/g,   'Dr§ ');
+      s = s.replace(/\bProf\.\s/g, 'Prof§ ');
+      s = s.replace(/\bSt\.\s/g,   'St§ ');
+      s = s.replace(/U\.S\./g, 'U§S§');
+      s = s.replace(/U\.K\./g, 'U§K§');
+      s = s.replace(/E\.U\./g, 'E§U§');
+      s = s.replace(/U\.N\./g, 'U§N§');
+      s = s.replace(/\.\s+/g,    '...   ');
+      s = s.replace(/\?\s+/g,    '?..   ');
+      s = s.replace(/!\s+/g,     '!..   ');
+      s = s.replace(/,\s+/g,     ',  ');
+      s = s.replace(/;\s+/g,     ',...  ');
+      s = s.replace(/\u2014/g,   ',  ');
+      s = s.replace(/\.\.\.\s*/g,'......  ');
+      // Restore as spoken words — no period means Google's NLP won't pause mid-name
+      s = s.replace(/Mr§/g,   'Mister ');
+      s = s.replace(/Mrs§/g,  'Missus ');
+      s = s.replace(/Ms§/g,   'Miss ');
+      s = s.replace(/Dr§/g,   'Doctor ');
+      s = s.replace(/Prof§/g, 'Professor ');
+      s = s.replace(/St§/g,   'Saint ');
+      s = s.replace(/U§S§/g, 'U.S.');
+      s = s.replace(/U§K§/g, 'U.K.');
+      s = s.replace(/E§U§/g, 'E.U.');
+      s = s.replace(/U§N§/g, 'U.N.');
+      return s;
+    }
+
+    // Builds one merged Journey chunk from a group of paragraphs
+    function buildJourneyChunk(paraGroup) {
+      return { type: 'text', value: paraGroup.map(processJourneyText).join('......    ') };
+    }
+
+    // Chinese paragraph SSML (character-by-character punctuation handling)
+    function chineseParagraphSsml(para) {
+      var marked = '';
+      for (var ci = 0; ci < para.length; ci++) {
+        marked += escXml(para[ci]);
+        var c = para[ci];
+        if (c === '\u3002') marked += '<break time="480ms"/>';
+        else if (c === '\uff01') marked += '<break time="400ms"/>';
+        else if (c === '\uff1f') marked += '<break time="420ms"/>';
+        else if (c === '\uff0c' || c === '\u3001') marked += '<break time="220ms"/>';
+      }
+      return { type: 'ssml', value: '<speak><prosody rate="88%" pitch="-0.5st">'
+        + marked + '<break time="500ms"/></prosody></speak>' };
+    }
+
+    // ── Split into merged chunks ────────────────────────────────────────────
     var chunks = [];
+    var MAX_CHUNK_CHARS = 3500;
 
     if (storyTitle) {
       chunks.push(titleChunk(storyTitle));
-      // For Journey voices, insert 1.5s of real silence after the title
       if (isJourney) {
         chunks.push({ type: 'silence', durationMs: 1500 });
       }
@@ -1277,50 +1264,68 @@
       var sentences = marked.split('|').map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
       var cur = '';
       sentences.forEach(function(s) {
-        if (cur.length + s.length > 150 && cur.length > 0) { chunks.push(paragraphSsml(cur)); cur = s; }
+        if (cur.length + s.length > 150 && cur.length > 0) { chunks.push(chineseParagraphSsml(cur)); cur = s; }
         else cur += s;
       });
-      if (cur.length > 0) chunks.push(paragraphSsml(cur));
+      if (cur.length > 0) chunks.push(chineseParagraphSsml(cur));
+    } else if (isJourney) {
+      var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
+      if (paras.length === 0) paras = [text.trim()];
+      var group = [], groupLen = 0;
+      paras.forEach(function(p) {
+        var processed = processJourneyText(p.trim());
+        if (groupLen + processed.length > MAX_CHUNK_CHARS && group.length > 0) {
+          chunks.push(buildJourneyChunk(group));
+          group = []; groupLen = 0;
+        }
+        group.push(p.trim());
+        groupLen += processed.length;
+      });
+      if (group.length > 0) chunks.push(buildJourneyChunk(group));
     } else {
       var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
-      paras.forEach(function(p, pi) {
-        chunks.push(paragraphSsml(p.trim()));
-        // For Journey voices, insert a silence gap between paragraphs
-        if (isJourney && pi < paras.length - 1) {
-          chunks.push({ type: 'silence', durationMs: 600 });
+      var group = [], groupLen = 0;
+      paras.forEach(function(p) {
+        var inner = paragraphInnerSsml(p.trim());
+        if (groupLen + inner.length > MAX_CHUNK_CHARS && group.length > 0) {
+          chunks.push(buildSsmlChunk(group));
+          group = []; groupLen = 0;
         }
+        group.push(p.trim());
+        groupLen += inner.length;
       });
+      if (group.length > 0) chunks.push(buildSsmlChunk(group));
     }
 
     // ── "The End" finale ────────────────────────────────────────────────────
     if (isJourney) {
-      chunks.push({ type: 'silence', durationMs: 1200 });
-      chunks.push({ type: 'text', value: '......  The End.' });
+      chunks.push({ type: 'silence', durationMs: 2000 });
+      chunks.push({ type: 'text', value: '..........   The...   End...' });
     } else if (isStudio) {
       chunks.push({ type: 'silence', durationMs: 800 });
       chunks.push({ type: 'ssml', value: '<speak>'
-        + '<break time="1200ms"/>'
-        + '<prosody rate="72%">'
-        + 'The End.'
+        + '<break time="2000ms"/>'
+        + '<prosody rate="58%">'
+        + 'The<break time="400ms"/> End.'
         + '</prosody>'
+        + '<break time="800ms"/>'
         + '</speak>' });
     } else {
       chunks.push({ type: 'silence', durationMs: 800 });
-      var theEndPitch = isChinese ? '-1st' : '-2st';
+      var theEndPitch = isChinese ? '-1st' : '-3st';
       chunks.push({ type: 'ssml', value: '<speak>'
-        + '<break time="1200ms"/>'
-        + '<prosody rate="72%" pitch="' + theEndPitch + '">'
-        + 'The End.'
+        + '<break time="2000ms"/>'
+        + '<prosody rate="58%" pitch="' + theEndPitch + '">'
+        + 'The<break time="400ms"/> End.'
         + '</prosody>'
+        + '<break time="800ms"/>'
         + '</speak>' });
     }
 
     if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
 
     // ── Audio config ────────────────────────────────────────────────────────
-    // Journey voices: slower rate, no pitch (not supported)
-    // Chinese Wavenet: 5% faster
     var effectiveSpeechRate = isJourney ? speechRate * 0.82
                             : isStudio   ? speechRate * 0.90
                             : isChinese  ? speechRate * 1.05
@@ -1333,44 +1338,23 @@
       effectsProfileId: ['headphone-class-device']
     };
 
-    // ── Fetch sequentially, decode + concatenate via Web Audio API ──────────
+    // ── Fetch all chunks in parallel, decode + concatenate ──────────────────
     var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    var decodedBuffers = [];
+    var doneCount = 0;
+    var textChunkCount = chunks.filter(function(c){ return c.type !== 'silence'; }).length;
 
-    function fetchAndDecode(index) {
-      // Handle silence chunks - create a silent AudioBuffer directly
-      if (index < chunks.length && chunks[index].type === 'silence') {
-        var sampleRate = 24000;
-        var numSamples = Math.floor(sampleRate * chunks[index].durationMs / 1000);
-        var silentBuf  = audioCtx.createBuffer(1, numSamples, sampleRate);
-        decodedBuffers.push(silentBuf);
-        return fetchAndDecode(index + 1);
+    var promises = chunks.map(function(chunk) {
+      if (chunk.type === 'silence') {
+        var sr = 24000;
+        var n  = Math.floor(sr * chunk.durationMs / 1000);
+        return Promise.resolve(audioCtx.createBuffer(1, n, sr));
       }
-
-      if (index >= chunks.length) {
-        var totalLength = decodedBuffers.reduce(function(sum, b){ return sum + b.length; }, 0);
-        var sampleRate  = decodedBuffers[0].sampleRate;
-        var numChannels = decodedBuffers[0].numberOfChannels;
-        var combined    = audioCtx.createBuffer(numChannels, totalLength, sampleRate);
-        var offset = 0;
-        decodedBuffers.forEach(function(buf) {
-          for (var ch = 0; ch < numChannels; ch++) {
-            combined.getChannelData(ch).set(buf.getChannelData(ch), offset);
-          }
-          offset += buf.length;
-        });
-        var wavBlob = audioBufferToWav(combined);
-        audioCtx.close();
-        return Promise.resolve(URL.createObjectURL(wavBlob));
-      }
-
       return fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY, {
         method: 'POST',
+        signal: signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          input: chunks[index].type === 'ssml'
-            ? { ssml: chunks[index].value }
-            : { text: chunks[index].value },
+          input: chunk.type === 'ssml' ? { ssml: chunk.value } : { text: chunk.value },
           voice: { languageCode: languageCode, name: voiceId },
           audioConfig: audioConfig
         })
@@ -1380,24 +1364,38 @@
         });
         return r.json();
       }).then(function(d) {
-        if (!d.audioContent) throw new Error('No audio for chunk ' + index);
+        if (!d.audioContent) throw new Error('No audio content received');
         var bin  = atob(d.audioContent);
         var ab   = new ArrayBuffer(bin.length);
         var view = new Uint8Array(ab);
         for (var k = 0; k < bin.length; k++) view[k] = bin.charCodeAt(k);
         return audioCtx.decodeAudioData(ab);
       }).then(function(decoded) {
-        decodedBuffers.push(decoded);
-        if (typeof onProgress === 'function') {
-          var textChunks = chunks.filter(function(c){ return c.type !== 'silence'; });
-          var doneText   = chunks.slice(0, index + 1).filter(function(c){ return c.type !== 'silence'; }).length;
-          onProgress(Math.min(doneText, textChunks.length), textChunks.length);
-        }
-        return fetchAndDecode(index + 1);
+        doneCount++;
+        if (typeof onProgress === 'function') onProgress(doneCount, textChunkCount);
+        return decoded;
       });
-    }
+    });
 
-    return fetchAndDecode(0);
+    return Promise.all(promises).then(function(buffers) {
+      var totalLength = buffers.reduce(function(sum, b){ return sum + b.length; }, 0);
+      var sampleRate  = buffers[0].sampleRate;
+      var numChannels = buffers[0].numberOfChannels;
+      var combined    = audioCtx.createBuffer(numChannels, totalLength, sampleRate);
+      var offset = 0;
+      buffers.forEach(function(buf) {
+        for (var ch = 0; ch < numChannels; ch++) {
+          combined.getChannelData(ch).set(buf.getChannelData(ch), offset);
+        }
+        offset += buf.length;
+      });
+      var wavBlob = audioBufferToWav(combined);
+      audioCtx.close();
+      return URL.createObjectURL(wavBlob);
+    }).catch(function(err) {
+      audioCtx.close();
+      throw err;
+    });
   }
 
   // Convert AudioBuffer to WAV Blob
@@ -1490,21 +1488,14 @@
     var voice   = null;
     voices.forEach(function(v) { if (v.id === voiceId) voice = v; });
     if (!voice) return;
-    // Stop current playback; update pending voice; show load button
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     pendingNarrationVoice = voice;
     var titleEl = document.getElementById('storyTitle');
     pendingNarrationTitle = titleEl ? titleEl.textContent : '';
-    var lnr = document.getElementById('loadNarrationRow');
-    var pc  = document.getElementById('playerControls');
-    var ast = document.getElementById('audioStatus');
-    if (lnr) { lnr.style.display = 'block'; }
-    if (pc)  { pc.style.display  = 'none';  }
-    if (ast) { ast.style.display = 'none';  }
-    var btn = document.getElementById('loadNarrationBtn');
-    if (btn) { btn.disabled = false; btn.textContent = '🎙️ Load Narration'; }
+    loadNarration();
   }
   function newStory() {
+    if (narrationAbortController) { narrationAbortController.abort(); narrationAbortController = null; }
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     document.getElementById('storyCard').classList.remove('visible');
     document.getElementById('setupSection').style.display = 'block';
@@ -1533,21 +1524,8 @@
       speedSlider.addEventListener('input', function() { updateSpeedSlider(speedSlider.value); });
       speedSlider.addEventListener('change', function() {
         if (!fullStoryText) return;
-        var voiceId = document.getElementById('liveVoiceSelect').value;
-        var voices  = VOICES[selectedLang] || VOICES.en;
-        var voice   = null;
-        voices.forEach(function(v) { if (v.id === voiceId) voice = v; });
-        if (!voice) return;
-        var ct = currentAudio ? currentAudio.currentTime : 0;
         if (currentAudio) currentAudio.pause();
-        setAudioLoading(true);
-        var titleEl = document.getElementById('storyTitle');
-        var currentTitle = titleEl ? titleEl.textContent : '';
-        generateGoogleAudio(fullStoryText, voiceId, voice.lang, currentTitle)
-          .then(function(url) {
-            setupAudioPlayer(url); setAudioLoading(false);
-            if (ct > 0 && currentAudio && currentAudio.duration) currentAudio.currentTime = Math.min(ct, currentAudio.duration - 1);
-          }).catch(function(err) { setAudioLoading(false); showError('Speed update failed: ' + err.message); });
+        loadNarration();
       });
     }
     var liveVoice = document.getElementById('liveVoiceSelect');
@@ -1735,19 +1713,14 @@
       }
     }
 
-    // Set up for on-demand narration
+    // Set up voice and auto-start narration
     var voice = VOICES[selectedLang].find(function(v){ return v.id === story.voiceId; })
              || VOICES[selectedLang][0];
     pendingNarrationVoice = voice;
     pendingNarrationTitle = story.title || '';
-    var lnr = document.getElementById('loadNarrationRow');
-    var pc  = document.getElementById('playerControls');
     var ast = document.getElementById('audioStatus');
-    if (lnr) { lnr.style.display = 'block'; }
-    if (pc)  { pc.style.display  = 'none';  }
-    if (ast) { ast.style.display = 'none';  }
-    var btn = document.getElementById('loadNarrationBtn');
-    if (btn) { btn.disabled = false; btn.textContent = '🎙️ Load Narration'; }
+    if (ast) { ast.style.display = 'none'; }
+    loadNarration();
   }
 
   function showSection(section) {
