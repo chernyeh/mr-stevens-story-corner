@@ -183,6 +183,9 @@
   .live-voice-select { flex: 1; padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(26,26,46,0.14); background: white; color: var(--ink); font-family: 'Nunito',sans-serif; font-size: 0.78rem; outline: none; cursor: pointer; appearance: none; }
   .live-voice-select option { background: white; color: var(--ink); }
   .live-voice-select:focus { border-color: var(--gold); }
+  .preview-voice-btn { padding: 4px 10px; border-radius: 7px; border: 1px solid rgba(26,26,46,0.18); background: white; color: var(--ink); font-family: 'Nunito',sans-serif; font-size: 0.72rem; font-weight: 700; cursor: pointer; white-space: nowrap; transition: all 0.15s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .preview-voice-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+  .preview-voice-btn:disabled { opacity: 0.45; cursor: default; }
   .speed-slider-wrap { flex: 1; display: flex; align-items: center; gap: 6px; }
   .speed-tick { font-size: 0.63rem; color: rgba(26,26,46,0.3); white-space: nowrap; }
   .speed-range { flex: 1; height: 2px; -webkit-appearance: none; background: rgba(232,160,69,0.2); border-radius: 10px; outline: none; cursor: pointer; }
@@ -319,6 +322,7 @@
         <div class="player-setting-row">
           <span class="player-setting-label">🎙️ Voice</span>
           <select class="live-voice-select" id="liveVoiceSelect"><option value="">Loading...</option></select>
+          <button class="preview-voice-btn" id="previewVoiceBtn" onclick="previewVoice()" title="Hear a sample of this voice">▶ Preview</button>
         </div>
         <div class="player-setting-row">
           <span class="player-setting-label">🐢 Speed</span>
@@ -356,6 +360,7 @@
   var narrationAbortController = null;
   var streamingAudio = null;
   var streamingProgressInterval = null;
+  var previewAudio = null;
   var builderSelections = { character: '', setting: '', twist: '', ending: '' };
 
   // ── VOICES ────────────────────────────────────────────────────────────────
@@ -903,7 +908,7 @@
       + getAgeInstructions(selectedAge) + '\n'
       + 'TARGET LENGTH: Approximately ' + targetWords + ' words.\n\n'
       + 'FORMAT YOUR RESPONSE EXACTLY LIKE THIS:\n'
-      + 'TITLE: [Story title]\nSTORY:\n[Full story text]\n\n'
+      + '<title>[Story title]</title>\n<story>\n[Full story text]\n</story>\n\n'
       + 'Rules:\n'
       + '- No chapter numbers or headers inside the story\n'
       + '- Write in flowing paragraphs separated by a blank line\n'
@@ -918,32 +923,81 @@
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 4096,
-        stream: false,
+        stream: true,
         messages: [{ role: 'user', content: prompt }]
       })
-    }).then(function(res) {
+    })
+    .then(function(res) {
       if (!res.ok) return res.json().then(function(ed) {
         throw new Error('Story generation failed (' + res.status + '): ' + (ed.error ? ed.error.message : ''));
       });
-      return res.json();
-    }).then(function(data) {
-      document.getElementById('loadingCard').classList.remove('visible');
-      var saveBtn = document.getElementById('saveBtn');
-      if (saveBtn) { saveBtn.textContent = '🌟 Save Story'; saveBtn.classList.remove('saved'); saveBtn.disabled = false; }
-      document.getElementById('storyTitle').textContent   = 'Writing your story...';
-      document.getElementById('storyText').textContent    = '';
-      document.getElementById('storyMeta').innerHTML      = '';
-      document.getElementById('nowReading').textContent   = 'Audio will be ready when story finishes...';
-      document.getElementById('progressFill').style.width = '0%';
-      document.getElementById('playBtn').textContent      = '\u25b6';
-      document.getElementById('playBtn').disabled         = true;
-      document.getElementById('playBtn').style.opacity    = '0.4';
-      var audioStatus = document.getElementById('audioStatus');
-      if (audioStatus) audioStatus.style.display = 'none';
-      document.getElementById('storyCard').classList.add('visible');
-      var rawText = data.content[0].text;
-      finaliseStream(rawText, voice, cfg, minutes);
-    }).catch(function(err) {
+
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      var rawText = '';
+      var storyCardReady = false;
+
+      function showStoryCard() {
+        if (storyCardReady) return;
+        storyCardReady = true;
+        document.getElementById('loadingCard').classList.remove('visible');
+        var saveBtn2 = document.getElementById('saveBtn');
+        if (saveBtn2) { saveBtn2.classList.remove('saved'); saveBtn2.disabled = true; }
+        document.getElementById('storyTitle').textContent   = '…';
+        document.getElementById('storyText').textContent    = '';
+        document.getElementById('storyMeta').innerHTML      = '';
+        document.getElementById('nowReading').textContent   = 'Audio will be ready when story finishes...';
+        document.getElementById('progressFill').style.width = '0%';
+        document.getElementById('playBtn').textContent      = '▶';
+        document.getElementById('playBtn').disabled         = true;
+        document.getElementById('playBtn').style.opacity    = '0.4';
+        var audioStatus = document.getElementById('audioStatus');
+        if (audioStatus) audioStatus.style.display = 'none';
+        document.getElementById('storyCard').classList.add('visible');
+      }
+
+      function processChunk() {
+        return reader.read().then(function(result) {
+          if (result.done) {
+            showStoryCard();
+            var doneBtn = document.getElementById('saveBtn');
+            if (doneBtn) { doneBtn.disabled = false; }
+            finaliseStream(rawText, voice, cfg, minutes);
+            return;
+          }
+          buffer += decoder.decode(result.value, { stream: true });
+          var events = buffer.split('\n\n');
+          buffer = events.pop();
+          var parseError = null;
+          events.forEach(function(event) {
+            if (parseError || !event.trim()) return;
+            var dataLine = '';
+            event.split('\n').forEach(function(line) {
+              if (line.startsWith('data: ')) dataLine = line.slice(6);
+            });
+            if (!dataLine) return;
+            try {
+              var parsed = JSON.parse(dataLine);
+              if (parsed.type === 'error') {
+                parseError = new Error((parsed.error && parsed.error.message) || 'Story generation error');
+                return;
+              }
+              if (parsed.type === 'content_block_delta' && parsed.delta && parsed.delta.type === 'text_delta') {
+                rawText += parsed.delta.text;
+                showStoryCard();
+                updateStoryDisplay(rawText);
+              }
+            } catch(e) { /* incomplete JSON event — ignore */ }
+          });
+          if (parseError) throw parseError;
+          return processChunk();
+        });
+      }
+
+      return processChunk();
+    })
+    .catch(function(err) {
       document.getElementById('loadingCard').classList.remove('visible');
       document.getElementById('storyCard').classList.remove('visible');
       document.getElementById('setupSection').style.display = 'block';
@@ -952,32 +1006,45 @@
   }
 
   function updateStoryDisplay(rawText) {
-    // Extract title
-    var tm = rawText.match(/TITLE:\s*([^\n]+)/);
-    if (tm) document.getElementById('storyTitle').textContent = tm[1].trim();
-    // Extract story body - everything after STORY: line
-    var storyIdx = rawText.indexOf('STORY:');
-    if (storyIdx !== -1) {
-      var afterStory = rawText.slice(storyIdx + 6).replace(/^\s*\n/, '');
-      document.getElementById('storyText').textContent = afterStory;
+    // Title: complete tag or partial (streaming)
+    var tm = rawText.match(/<title>([\s\S]*?)<\/title>/);
+    if (tm) {
+      document.getElementById('storyTitle').textContent = tm[1].trim();
+    } else {
+      var tStart = rawText.indexOf('<title>');
+      if (tStart !== -1) {
+        var partialTitle = rawText.slice(tStart + 7).replace(/<[\s\S]*$/, '').trim();
+        if (partialTitle) document.getElementById('storyTitle').textContent = partialTitle;
+      }
+    }
+    // Story body: between <story> and </story> (or to end while streaming)
+    var sStart = rawText.indexOf('<story>');
+    if (sStart !== -1) {
+      var partial = rawText.slice(sStart + 7).replace(/<\/story>[\s\S]*$/, '').trim();
+      document.getElementById('storyText').textContent = partial;
     }
   }
 
   function finaliseStream(rawText, voice, cfg, minutes) {
-    // Extract title
     var storyTitle = '';
-    var tm = rawText.match(/TITLE:\s*([^\n]+)/);
+    var tm = rawText.match(/<title>([\s\S]*?)<\/title>/);
     if (tm) {
       storyTitle = tm[1].trim();
       document.getElementById('storyTitle').textContent = storyTitle;
     }
-    // Extract story body
-    var storyIdx = rawText.indexOf('STORY:');
     var storyText = '';
-    if (storyIdx !== -1) {
-      storyText = rawText.slice(storyIdx + 6).replace(/^\s*\n/, '').trim();
+    var sm = rawText.match(/<story>([\s\S]*?)<\/story>/);
+    if (sm) {
+      storyText = sm[1].trim();
     } else {
-      storyText = rawText.trim();
+      // Partial <story> tag (truncated stream) or old-format fallback
+      var sTagIdx = rawText.indexOf('<story>');
+      if (sTagIdx !== -1) {
+        storyText = rawText.slice(sTagIdx + 7).trim();
+      } else {
+        var legacyIdx = rawText.indexOf('STORY:');
+        storyText = legacyIdx !== -1 ? rawText.slice(legacyIdx + 6).replace(/^\s*\n/, '').trim() : rawText.trim();
+      }
     }
     finishStory(storyTitle, storyText, voice, cfg, minutes);
   }
@@ -1053,13 +1120,16 @@
         }, 250);
       }
     )
-    .then(function(url) {
+    .then(function(result) {
       narrationAbortController = null;
       var elapsed    = streamingAudio ? streamingAudio.getElapsed() : 0;
       var wasPlaying = streamingAudio ? !streamingAudio.paused : false;
       if (streamingProgressInterval) { clearInterval(streamingProgressInterval); streamingProgressInterval = null; }
       if (streamingAudio) { streamingAudio.destroy(); streamingAudio = null; }
-      setupAudioPlayer(url);
+      setupAudioPlayer(result.url);
+      var readyMsg = result.warnings > 0
+        ? 'Ready — ▶  ⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' could not load'
+        : 'Ready — press ▶ to begin';
       if (elapsed > 0) {
         var seekOnMeta = function() {
           currentAudio.removeEventListener('loadedmetadata', seekOnMeta);
@@ -1073,11 +1143,11 @@
         currentAudio.addEventListener('loadedmetadata', seekOnMeta);
         if (!wasPlaying) {
           if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
-          document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
+          document.getElementById('nowReading').textContent = readyMsg;
         }
       } else {
         if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
-        document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
+        document.getElementById('nowReading').textContent = readyMsg;
       }
     })
     .catch(function(err) {
@@ -1488,13 +1558,24 @@
       }
     }
 
+    // Item 7: count chunk failures for graceful degradation
+    var chunkWarnings = 0;
+
     var promises = chunks.map(function(chunk, idx) {
       var ti = chunkTextIdx[idx];
       if (chunk.type === 'silence') {
         var sr = 24000, n = Math.floor(sr * chunk.durationMs / 1000);
         return Promise.resolve(audioCtx.createBuffer(1, n, sr)).then(function(buf){ trySchedule(idx, buf); return buf; });
       }
-      return fetchChunkWithRetry(chunk, ti, 3, 1000).then(function(buf){ trySchedule(idx, buf); return buf; });
+      return fetchChunkWithRetry(chunk, ti, 3, 1000)
+        .catch(function(err) {
+          if (err.name === 'AbortError') throw err;
+          chunkWarnings++;
+          addPhase(ti, 1.0 - progressWeights[ti]); // complete remaining progress
+          var sr = 24000, n = sr * 5; // ~5 s silence in place of failed chunk
+          return audioCtx.createBuffer(1, n, sr);
+        })
+        .then(function(buf){ trySchedule(idx, buf); return buf; });
     });
 
     return Promise.all(promises).then(function(buffers) {
@@ -1511,7 +1592,7 @@
       });
       var wavBlob = audioBufferToWav(combined);
       audioCtx.close();
-      return URL.createObjectURL(wavBlob);
+      return { url: URL.createObjectURL(wavBlob), warnings: chunkWarnings };
     }).catch(function(err) {
       audioCtx.close();
       throw err;
@@ -1619,6 +1700,61 @@
     document.getElementById('currentTime').textContent  = '0:00';
     document.getElementById('nowReading').textContent   = 'Press play to begin narration';
   }
+  function previewVoice() {
+    var btn = document.getElementById('previewVoiceBtn');
+    if (!btn || btn.disabled) return;
+    var voiceId = document.getElementById('liveVoiceSelect').value;
+    var voices  = VOICES[selectedLang] || VOICES.en;
+    var voice   = null;
+    voices.forEach(function(v) { if (v.id === voiceId) voice = v; });
+    if (!voice) return;
+
+    if (previewAudio) { previewAudio.pause(); previewAudio = null; }
+    btn.disabled = true; btn.textContent = '⏳';
+
+    var phrases = {
+      en: 'Hello! I\'m your story narrator. Let me tell you a wonderful tale.',
+      fr: 'Bonjour ! Je suis votre narrateur. Laissez-moi vous raconter une histoire.',
+      zh: '你好！我是你的故事讲述者，让我给你讲一个精彩的故事。'
+    };
+    var phrase = phrases[selectedLang] || phrases.en;
+    var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
+    var isStudio  = voiceId.toLowerCase().indexOf('studio')  !== -1;
+    var isChinese = voice.lang === 'cmn-CN';
+
+    var reqBody = {
+      input: { text: phrase },
+      voice: { languageCode: voice.lang, name: voiceId },
+      audioConfig: {
+        audioEncoding: 'MP3',
+        speakingRate: isJourney ? speechRate * 0.82 : isStudio ? speechRate * 0.90 : isChinese ? speechRate * 1.05 : speechRate,
+        pitch: (isJourney || isStudio) ? 0.0 : -2.0,
+        effectsProfileId: ['headphone-class-device']
+      }
+    };
+    fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reqBody)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.audioContent) throw new Error('No audio');
+      var audio = new Audio('data:audio/mp3;base64,' + d.audioContent);
+      previewAudio = audio;
+      audio.onended = audio.onerror = function() {
+        previewAudio = null;
+        btn.disabled = false; btn.textContent = '▶ Preview';
+      };
+      audio.play();
+      btn.textContent = '🔊 Playing';
+    })
+    .catch(function() {
+      previewAudio = null;
+      btn.disabled = false; btn.textContent = '▶ Preview';
+    });
+  }
+
   function changeVoiceLive() {
     if (!fullStoryText) return;
     var voiceId = document.getElementById('liveVoiceSelect').value;
