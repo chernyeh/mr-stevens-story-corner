@@ -11,7 +11,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // req.body is already parsed by Vercel when Content-Type is application/json
     const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -23,6 +22,21 @@ export default async function handler(req, res) {
       },
       body: body
     });
+
+    // Streaming: pipe SSE events through to the client
+    if (req.body && req.body.stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Accel-Buffering', 'no');
+      const reader = response.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+      }
+      res.end();
+      return;
+    }
 
     const text = await response.text();
 
