@@ -358,8 +358,6 @@
   var pendingNarrationVoice = null;
   var pendingNarrationTitle = '';
   var narrationAbortController = null;
-  var streamingAudio = null;
-  var streamingProgressInterval = null;
   var previewAudio = null;
   var builderSelections = { character: '', setting: '', twist: '', ending: '' };
 
@@ -1073,10 +1071,6 @@
     narrationAbortController = new AbortController();
     var signal = narrationAbortController.signal;
 
-    // Clean up any previous streaming session
-    if (streamingAudio) { streamingAudio.destroy(); streamingAudio = null; }
-    if (streamingProgressInterval) { clearInterval(streamingProgressInterval); streamingProgressInterval = null; }
-
     var voice      = pendingNarrationVoice;
     var storyTitle = pendingNarrationTitle;
     var text       = fullStoryText;
@@ -1089,71 +1083,22 @@
     if (playBtn) { playBtn.disabled = true; playBtn.style.opacity = '0.4'; }
     document.getElementById('nowReading').textContent = '🎙️ Loading narration…';
 
-    var startTime = Date.now();
-    var streamHasStarted = false;
     function updateProgress(done, total) {
-      if (streamHasStarted) return;
-      var pct     = total > 0 ? Math.min(99, Math.round(done / total * 100)) : 0;
-      var elapsed = (Date.now() - startTime) / 1000;
-      var remaining = done > 0 ? Math.round((elapsed / done) * (total - done)) : null;
-      var remStr  = remaining !== null
-        ? (remaining <= 1 ? ' — almost done…' : ' — about ' + remaining + 's left')
-        : '…';
-      document.getElementById('nowReading').textContent = '🎙️ Loading ' + pct + '%' + remStr;
+      document.getElementById('nowReading').textContent =
+        '🎙️ Loading… ' + done + ' of ' + total + ' sections ready';
     }
 
-    generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal,
-      function onStreamingStarted(streaming) {
-        streamHasStarted = true;
-        streamingAudio = streaming;
-        if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
-        document.getElementById('nowReading').textContent = '▶ Press play — still loading…';
-        streamingProgressInterval = setInterval(function() {
-          if (!streamingAudio) { clearInterval(streamingProgressInterval); streamingProgressInterval = null; return; }
-          var pos   = streamingAudio.getElapsed();
-          var total = streamingAudio.getTotalDuration();
-          if (total > 0) {
-            document.getElementById('progressFill').style.width = Math.min(100, pos / total * 100) + '%';
-            document.getElementById('currentTime').textContent  = formatTime(pos);
-            document.getElementById('totalTime').textContent    = '~' + formatTime(total);
-          }
-        }, 250);
-      }
-    )
+    generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal)
     .then(function(result) {
       narrationAbortController = null;
-      var elapsed    = streamingAudio ? streamingAudio.getElapsed() : 0;
-      var wasPlaying = streamingAudio ? !streamingAudio.paused : false;
-      if (streamingProgressInterval) { clearInterval(streamingProgressInterval); streamingProgressInterval = null; }
-      if (streamingAudio) { streamingAudio.destroy(); streamingAudio = null; }
       setupAudioPlayer(result.url);
-      var readyMsg = result.warnings > 0
+      if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
+      document.getElementById('nowReading').textContent = result.warnings > 0
         ? 'Ready — ▶  ⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' could not load'
         : 'Ready — press ▶ to begin';
-      if (elapsed > 0) {
-        var seekOnMeta = function() {
-          currentAudio.removeEventListener('loadedmetadata', seekOnMeta);
-          currentAudio.currentTime = Math.min(elapsed, currentAudio.duration - 0.1);
-          if (wasPlaying) {
-            currentAudio.play();
-            document.getElementById('playBtn').textContent    = '⏸';
-            document.getElementById('nowReading').textContent = 'Now playing…';
-          }
-        };
-        currentAudio.addEventListener('loadedmetadata', seekOnMeta);
-        if (!wasPlaying) {
-          if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
-          document.getElementById('nowReading').textContent = readyMsg;
-        }
-      } else {
-        if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
-        document.getElementById('nowReading').textContent = readyMsg;
-      }
     })
     .catch(function(err) {
       narrationAbortController = null;
-      if (streamingProgressInterval) { clearInterval(streamingProgressInterval); streamingProgressInterval = null; }
-      if (streamingAudio) { streamingAudio.destroy(); streamingAudio = null; }
       if (err.name === 'AbortError') return;
       if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
       document.getElementById('nowReading').textContent = '⚠️ Audio failed — change voice or retry';
@@ -1166,7 +1111,6 @@
   }
 
   function seekAudio(seconds) {
-    if (streamingAudio) return;
     if (!currentAudio) return;
     var t = currentAudio.currentTime + seconds;
     if (t < 0) t = 0;
@@ -1175,7 +1119,7 @@
   }
 
   // ── GOOGLE TTS ────────────────────────────────────────────────────────────
-  function generateGoogleAudio(text, voiceId, languageCode, storyTitle, onProgress, signal, onStreamingStarted) {
+  function generateGoogleAudio(text, voiceId, languageCode, storyTitle, onProgress, signal) {
     var isChinese = (languageCode === 'cmn-CN');
     var isFrench  = (languageCode === 'fr-FR' || languageCode === 'fr-CA');
     var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
@@ -1185,27 +1129,27 @@
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
     }
 
-    // Title - read like a narrator announcing the story name
+    // Title - read with grandeur; 2-second pause before story begins
     function titleChunk(title) {
       if (isJourney) {
-        return { type: 'text', value: title + '......' };
+        return { type: 'text', value: title + '..........' };
       }
       var t = escXml(title);
       if (isStudio) {
         return { type: 'ssml', value: '<speak>'
           + '<break time="500ms"/>'
-          + '<prosody rate="75%">'
-          + '<emphasis level="moderate">' + t + '</emphasis>'
+          + '<prosody rate="72%" volume="+1dB">'
+          + '<emphasis level="strong">' + t + '</emphasis>'
           + '</prosody>'
-          + '<break time="1800ms"/>'
+          + '<break time="2000ms"/>'
           + '</speak>' };
       }
       return { type: 'ssml', value: '<speak>'
         + '<break time="500ms"/>'
-        + '<prosody rate="75%" pitch="-1st">'
-        + '<emphasis level="moderate">' + t + '</emphasis>'
+        + '<prosody rate="72%" pitch="-1.5st" volume="+1dB">'
+        + '<emphasis level="strong">' + t + '</emphasis>'
         + '</prosody>'
-        + '<break time="1800ms"/>'
+        + '<break time="2000ms"/>'
         + '</speak>' };
     }
 
@@ -1228,13 +1172,15 @@
       s = s.replace(/U\.K\./g, 'U§K§');
       s = s.replace(/E\.U\./g, 'E§U§');
       s = s.replace(/U\.N\./g, 'U§N§');
-      s = s.replace(/\u2014/g, '<break time="300ms"/>');
-      // Full stop - longer pause
-      s = s.replace(/\.\s+/g, '.<break time="450ms"/> ');
-      // Question mark - medium pause with slight upward feel
-      s = s.replace(/\?\s+/g, '?<break time="400ms"/> ');
-      // Exclamation mark - sharp pause
-      s = s.replace(/!\s+/g, '!<break time="380ms"/> ');
+      s = s.replace(/\u2014/g, '<break time="500ms"/>');
+      // Full stop - definitive pause (Google applies natural downward inflection)
+      s = s.replace(/\.\s+/g, '.<break time="600ms"/> ');
+      // Question mark - pitch-up prosody on the mark itself for genuine curiosity
+      s = s.replace(/\?\s+/g, '<prosody pitch="+2st">?</prosody><break time="400ms"/> ');
+      s = s.replace(/\?$/, '<prosody pitch="+2st">?</prosody>');
+      // Exclamation mark - rate-boost for energy and urgency
+      s = s.replace(/!\s+/g, '<prosody rate="108%">!</prosody><break time="380ms"/> ');
+      s = s.replace(/!$/, '<prosody rate="108%">!</prosody>');
       // Comma - short breath
       s = s.replace(/,\s+/g, ',<break time="250ms"/> ');
       // Semicolon - mid pause
@@ -1283,6 +1229,54 @@
       return s;
     }
 
+    // Keyword-based mood detection: returns { rate, pitch } for per-paragraph prosody
+    function detectParagraphMood(paraText) {
+      var baseRate  = isFrench ? 91 : 88;
+      var basePitch = isFrench ? -0.5 : -1.0;
+      var MOODS = [
+        { name: 'TENSE', rateOff: -8, pitchOff: -1.0, words: [
+            'dark','shadow','shadows','creak','creaked','silence','alone','ghost','haunted',
+            'afraid','fear','cold','shiver','pale','mysterious','eerie','gloomy','dread',
+            'trembled','shook','nightmare','lurk','lurking','monster','creature','terrified',
+            'screamed','screech','howled','howl','fog','mist','strange','hollow','damp','chill'
+        ]},
+        { name: 'ACTION', rateOff: +6, pitchOff: +0.5, words: [
+            'ran','sprint','sprinted','chase','chased','fought','fight','battle','crash',
+            'boom','blast','explode','exploded','jump','jumped','leap','leapt','dash','dashed',
+            'race','raced','rush','rushed','quick','suddenly','attack','attacked','escape',
+            'escaped','danger','burst','hurled','flung','ducked','dodged','roared'
+        ]},
+        { name: 'HAPPY', rateOff: +4, pitchOff: +1.0, words: [
+            'laugh','laughed','smile','smiled','joy','joyful','happy','happiness','celebrate',
+            'wonderful','amazing','fantastic','brilliant','excited','delight','delighted',
+            'cheer','cheered','giggle','giggled','splendid','lovely','sunshine','dance',
+            'danced','sing','sang','party','hooray','beamed','gleamed','sparkled'
+        ]},
+        { name: 'CALM', rateOff: -4, pitchOff: -0.5, words: [
+            'quiet','peaceful','gentle','softly','slowly','dreamed','drifted','whispered',
+            'sighed','breathed','still','calm','sleep','sleepy','dusk','evening','twilight',
+            'stars','moonlight','moon','safe','warm','cozy','cosy','nestled','settled',
+            'murmured','lullaby','drowsy','hummed','rested'
+        ]}
+      ];
+      var lower = paraText.toLowerCase();
+      var best = null, bestScore = 0;
+      for (var mi = 0; mi < MOODS.length; mi++) {
+        var m = MOODS[mi], score = 0, seen = {};
+        for (var wi = 0; wi < m.words.length; wi++) {
+          var w = m.words[wi];
+          if (!seen[w] && lower.indexOf(w) !== -1) { score++; seen[w] = true; }
+        }
+        if (score > bestScore) { bestScore = score; best = m; }
+      }
+      var rateOff  = (best && bestScore >= 2) ? best.rateOff  : 0;
+      var pitchOff = (best && bestScore >= 2) ? best.pitchOff : 0;
+      var finalRate  = Math.min(115, Math.max(65, baseRate + rateOff));
+      var finalPitch = basePitch + pitchOff;
+      var pitchStr = finalPitch === 0 ? '0st' : (finalPitch > 0 ? '+' : '') + finalPitch.toFixed(1) + 'st';
+      return { rate: finalRate + '%', pitch: pitchStr };
+    }
+
     // Returns inner SSML content for one paragraph (no <speak> wrapper)
     function paragraphInnerSsml(para) {
       var raw = wrapDialogue(escXml(para));
@@ -1290,17 +1284,20 @@
     }
 
     // Builds one merged SSML chunk from a group of paragraphs
+    // Each paragraph gets its own mood-adjusted prosody wrapper (1800ms paragraph breaks)
     function buildSsmlChunk(paraGroup) {
-      var rate    = isFrench ? '91%' : '88%';
-      var pauseMs = isStudio ? '1200ms' : '900ms';
-      var inner   = paraGroup.map(paragraphInnerSsml).join('<break time="1200ms"/>');
-      if (isStudio) {
-        return { type: 'ssml', value: '<speak><prosody rate="' + rate + '">'
-          + inner + '<break time="' + pauseMs + '"/></prosody></speak>' };
-      }
-      var pitch = isFrench ? '-0.5st' : '-1st';
-      return { type: 'ssml', value: '<speak><prosody rate="' + rate + '" pitch="' + pitch + '">'
-        + inner + '<break time="' + pauseMs + '"/></prosody></speak>' };
+      var parts = paraGroup.map(function(para) {
+        var mood  = detectParagraphMood(para);
+        var inner = paragraphInnerSsml(para);
+        if (isStudio) {
+          return '<prosody rate="' + mood.rate + '">' + inner + '</prosody>';
+        }
+        return '<prosody rate="' + mood.rate + '" pitch="' + mood.pitch + '">' + inner + '</prosody>';
+      });
+      return { type: 'ssml', value: '<speak>'
+        + parts.join('<break time="1800ms"/>')
+        + '<break time="900ms"/>'
+        + '</speak>' };
     }
 
     // Processes one paragraph's text for Journey voices (plain text with pause tricks)
@@ -1320,12 +1317,12 @@
       s = s.replace(/U\.K\./g, 'U§K§');
       s = s.replace(/E\.U\./g, 'E§U§');
       s = s.replace(/U\.N\./g, 'U§N§');
-      s = s.replace(/\.\s+/g,    '...   ');
+      s = s.replace(/\.\s+/g,    '......   ');
       s = s.replace(/\?\s+/g,    '?..   ');
       s = s.replace(/!\s+/g,     '!..   ');
       s = s.replace(/,\s+/g,     ',  ');
       s = s.replace(/;\s+/g,     ',...  ');
-      s = s.replace(/\u2014/g,   ',  ');
+      s = s.replace(/\u2014/g,   ',....  ');
       s = s.replace(/\.\.\.\s*/g,'......  ');
       // Restore as spoken words — no period means Google's NLP won't pause mid-name
       s = s.replace(/Mr§/g,   'Mister ');
@@ -1428,25 +1425,25 @@
     // ── "The End" finale ────────────────────────────────────────────────────
     if (isJourney) {
       chunks.push({ type: 'silence', durationMs: 2000 });
-      chunks.push({ type: 'text', value: '..........   The...   End...' });
+      chunks.push({ type: 'text', value: '..........     The.....   End.....' });
     } else if (isStudio) {
       chunks.push({ type: 'silence', durationMs: 800 });
       chunks.push({ type: 'ssml', value: '<speak>'
         + '<break time="2000ms"/>'
-        + '<prosody rate="58%">'
-        + 'The<break time="400ms"/> End.'
+        + '<prosody rate="55%" volume="-2dB">'
+        + 'The<break time="600ms"/> End.'
         + '</prosody>'
-        + '<break time="800ms"/>'
+        + '<break time="1500ms"/>'
         + '</speak>' });
     } else {
       chunks.push({ type: 'silence', durationMs: 800 });
       var theEndPitch = isChinese ? '-1st' : '-3st';
       chunks.push({ type: 'ssml', value: '<speak>'
         + '<break time="2000ms"/>'
-        + '<prosody rate="58%" pitch="' + theEndPitch + '">'
-        + 'The<break time="400ms"/> End.'
+        + '<prosody rate="55%" pitch="' + theEndPitch + '" volume="-2dB">'
+        + 'The<break time="600ms"/> End.'
         + '</prosody>'
-        + '<break time="800ms"/>'
+        + '<break time="1500ms"/>'
         + '</speak>' });
     }
 
@@ -1465,7 +1462,7 @@
       effectsProfileId: ['headphone-class-device']
     };
 
-    // ── Fetch all chunks: sub-chunk progress, auto-retry, streaming playback ──
+    // ── Fetch all chunks in parallel, report section-count progress ──
     var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     var textChunkCount = chunks.filter(function(c){ return c.type !== 'silence'; }).length;
 
@@ -1473,20 +1470,31 @@
     var tIdxCounter = 0;
     var chunkTextIdx = chunks.map(function(c){ return c.type === 'silence' ? -1 : tIdxCounter++; });
 
-    // Item 1: per-chunk fractional progress across 3 phases (0.4 fetch, 0.3 parse, 0.3 decode)
+    // Track completed sections and report integer count to onProgress
+    var completedSections = 0;
     var progressWeights = [];
     for (var pw = 0; pw < textChunkCount; pw++) progressWeights.push(0);
     function addPhase(ti, w) {
       if (ti < 0 || ti >= textChunkCount) return;
+      var wasComplete = progressWeights[ti] >= 1.0;
       progressWeights[ti] = Math.min(1, progressWeights[ti] + w);
-      if (typeof onProgress === 'function') {
-        var sum = 0;
-        for (var pi = 0; pi < textChunkCount; pi++) sum += progressWeights[pi];
-        onProgress(sum, textChunkCount);
+      if (!wasComplete && progressWeights[ti] >= 1.0) {
+        completedSections++;
+        if (typeof onProgress === 'function') onProgress(completedSections, textChunkCount);
       }
     }
 
-    // Item 4: fetch one chunk with exponential-backoff retry (up to 3 retries)
+    // Reject after 30 s of no response to guard against hung network requests
+    function withTimeout(promise, ms) {
+      return Promise.race([
+        promise,
+        new Promise(function(_, reject) {
+          setTimeout(function() { reject(new Error('chunk_timeout')); }, ms);
+        })
+      ]);
+    }
+
+    // Fetch one chunk with exponential-backoff retry (up to 3 retries)
     var TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY;
     function fetchChunkWithRetry(chunk, ti, retriesLeft, delay) {
       var reqBody = {
@@ -1496,20 +1504,18 @@
       };
       return fetch(TTS_URL, { method: 'POST', signal: signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) })
         .then(function(r) {
-          addPhase(ti, 0.4);
           if (!r.ok) return r.json().then(function(e){ throw new Error((e && e.error && e.error.message) ? e.error.message : 'TTS error ' + r.status); });
           return r.json();
         })
         .then(function(d) {
           if (!d.audioContent) throw new Error('No audio content received');
-          addPhase(ti, 0.3);
           var bin = atob(d.audioContent);
           var ab = new ArrayBuffer(bin.length);
           var view = new Uint8Array(ab);
           for (var k = 0; k < bin.length; k++) view[k] = bin.charCodeAt(k);
           return audioCtx.decodeAudioData(ab);
         })
-        .then(function(decoded) { addPhase(ti, 0.3); return decoded; })
+        .then(function(decoded) { addPhase(ti, 1.0); return decoded; })
         .catch(function(err) {
           if (err.name === 'AbortError') throw err;
           if (retriesLeft > 0) {
@@ -1520,62 +1526,23 @@
         });
     }
 
-    // Item 2: stream chunks into a Web Audio context as they arrive in order
-    var streamCtxLocal = null;
-    var streamFirstStartAt = 0;
-    var streamNextAt = 0;
-    var streamTotalDur = 0;
-    var streamNextToSchedule = 0;
-    var streamBufs = new Array(chunks.length).fill(null);
-    var streamHandle = null;
-    var streamNotified = false;
-
-    function trySchedule(idx, buf) {
-      streamBufs[idx] = buf;
-      while (streamNextToSchedule < chunks.length && streamBufs[streamNextToSchedule] !== null) {
-        var b = streamBufs[streamNextToSchedule];
-        if (!streamCtxLocal) {
-          streamCtxLocal = new (window.AudioContext || window.webkitAudioContext)();
-          streamFirstStartAt = streamCtxLocal.currentTime + 0.08;
-          streamNextAt = streamFirstStartAt;
-          streamHandle = {
-            paused: false,
-            getElapsed: function() { return streamCtxLocal ? Math.max(0, streamCtxLocal.currentTime - streamFirstStartAt) : 0; },
-            getTotalDuration: function() { return streamTotalDur; },
-            pause:   function() { if (streamCtxLocal && streamCtxLocal.state === 'running')   { streamCtxLocal.suspend(); this.paused = true; } },
-            resume:  function() { if (streamCtxLocal && streamCtxLocal.state === 'suspended') { streamCtxLocal.resume();  this.paused = false; } },
-            destroy: function() { if (streamCtxLocal) { streamCtxLocal.close(); streamCtxLocal = null; } this.paused = false; }
-          };
-        }
-        var src = streamCtxLocal.createBufferSource();
-        src.buffer = b; src.connect(streamCtxLocal.destination); src.start(streamNextAt);
-        streamNextAt += b.duration; streamTotalDur += b.duration;
-        streamNextToSchedule++;
-        if (!streamNotified && streamNextToSchedule >= 1 && typeof onStreamingStarted === 'function') {
-          streamNotified = true;
-          onStreamingStarted(streamHandle);
-        }
-      }
-    }
-
-    // Item 7: count chunk failures for graceful degradation
+    // Count chunk failures for graceful degradation
     var chunkWarnings = 0;
 
     var promises = chunks.map(function(chunk, idx) {
       var ti = chunkTextIdx[idx];
       if (chunk.type === 'silence') {
         var sr = 24000, n = Math.floor(sr * chunk.durationMs / 1000);
-        return Promise.resolve(audioCtx.createBuffer(1, n, sr)).then(function(buf){ trySchedule(idx, buf); return buf; });
+        return Promise.resolve(audioCtx.createBuffer(1, n, sr));
       }
-      return fetchChunkWithRetry(chunk, ti, 3, 1000)
+      return withTimeout(fetchChunkWithRetry(chunk, ti, 3, 1000), 30000)
         .catch(function(err) {
           if (err.name === 'AbortError') throw err;
           chunkWarnings++;
-          addPhase(ti, 1.0 - progressWeights[ti]); // complete remaining progress
+          addPhase(ti, 1.0 - progressWeights[ti]); // mark complete even on failure
           var sr = 24000, n = sr * 5; // ~5 s silence in place of failed chunk
           return audioCtx.createBuffer(1, n, sr);
-        })
-        .then(function(buf){ trySchedule(idx, buf); return buf; });
+        });
     });
 
     return Promise.all(promises).then(function(buffers) {
@@ -1664,18 +1631,6 @@
     });
   }
   function togglePlay() {
-    if (streamingAudio) {
-      if (streamingAudio.paused) {
-        streamingAudio.resume();
-        document.getElementById('playBtn').textContent    = '\u23f8';
-        document.getElementById('nowReading').textContent = 'Now playing\u2026';
-      } else {
-        streamingAudio.pause();
-        document.getElementById('playBtn').textContent    = '\u25b6';
-        document.getElementById('nowReading').textContent = 'Paused \u2014 press \u25b6 to continue';
-      }
-      return;
-    }
     if (!currentAudio) return;
     if (currentAudio.paused) {
       currentAudio.play();
@@ -1688,12 +1643,6 @@
     }
   }
   function stopReading() {
-    if (streamingAudio) {
-      streamingAudio.pause();
-      document.getElementById('playBtn').textContent    = '\u25b6';
-      document.getElementById('nowReading').textContent = 'Paused \u2014 press \u25b6 to continue';
-      return;
-    }
     if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
     document.getElementById('playBtn').textContent      = '\u25b6';
     document.getElementById('progressFill').style.width = '0%';
@@ -1770,8 +1719,6 @@
   }
   function newStory() {
     if (narrationAbortController) { narrationAbortController.abort(); narrationAbortController = null; }
-    if (streamingProgressInterval) { clearInterval(streamingProgressInterval); streamingProgressInterval = null; }
-    if (streamingAudio) { streamingAudio.destroy(); streamingAudio = null; }
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     document.getElementById('storyCard').classList.remove('visible');
     document.getElementById('setupSection').style.display = 'block';
