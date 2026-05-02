@@ -1185,27 +1185,27 @@
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
     }
 
-    // Title - read like a narrator announcing the story name
+    // Title - read with grandeur; 2-second pause before story begins
     function titleChunk(title) {
       if (isJourney) {
-        return { type: 'text', value: title + '......' };
+        return { type: 'text', value: title + '..........' };
       }
       var t = escXml(title);
       if (isStudio) {
         return { type: 'ssml', value: '<speak>'
           + '<break time="500ms"/>'
-          + '<prosody rate="75%">'
-          + '<emphasis level="moderate">' + t + '</emphasis>'
+          + '<prosody rate="72%" volume="+1dB">'
+          + '<emphasis level="strong">' + t + '</emphasis>'
           + '</prosody>'
-          + '<break time="1800ms"/>'
+          + '<break time="2000ms"/>'
           + '</speak>' };
       }
       return { type: 'ssml', value: '<speak>'
         + '<break time="500ms"/>'
-        + '<prosody rate="75%" pitch="-1st">'
-        + '<emphasis level="moderate">' + t + '</emphasis>'
+        + '<prosody rate="72%" pitch="-1.5st" volume="+1dB">'
+        + '<emphasis level="strong">' + t + '</emphasis>'
         + '</prosody>'
-        + '<break time="1800ms"/>'
+        + '<break time="2000ms"/>'
         + '</speak>' };
     }
 
@@ -1228,13 +1228,15 @@
       s = s.replace(/U\.K\./g, 'U§K§');
       s = s.replace(/E\.U\./g, 'E§U§');
       s = s.replace(/U\.N\./g, 'U§N§');
-      s = s.replace(/\u2014/g, '<break time="300ms"/>');
-      // Full stop - longer pause
-      s = s.replace(/\.\s+/g, '.<break time="450ms"/> ');
-      // Question mark - medium pause with slight upward feel
-      s = s.replace(/\?\s+/g, '?<break time="400ms"/> ');
-      // Exclamation mark - sharp pause
-      s = s.replace(/!\s+/g, '!<break time="380ms"/> ');
+      s = s.replace(/\u2014/g, '<break time="500ms"/>');
+      // Full stop - definitive pause (Google applies natural downward inflection)
+      s = s.replace(/\.\s+/g, '.<break time="600ms"/> ');
+      // Question mark - pitch-up prosody on the mark itself for genuine curiosity
+      s = s.replace(/\?\s+/g, '<prosody pitch="+2st">?</prosody><break time="400ms"/> ');
+      s = s.replace(/\?$/, '<prosody pitch="+2st">?</prosody>');
+      // Exclamation mark - rate-boost for energy and urgency
+      s = s.replace(/!\s+/g, '<prosody rate="108%">!</prosody><break time="380ms"/> ');
+      s = s.replace(/!$/, '<prosody rate="108%">!</prosody>');
       // Comma - short breath
       s = s.replace(/,\s+/g, ',<break time="250ms"/> ');
       // Semicolon - mid pause
@@ -1283,6 +1285,54 @@
       return s;
     }
 
+    // Keyword-based mood detection: returns { rate, pitch } for per-paragraph prosody
+    function detectParagraphMood(paraText) {
+      var baseRate  = isFrench ? 91 : 88;
+      var basePitch = isFrench ? -0.5 : -1.0;
+      var MOODS = [
+        { name: 'TENSE', rateOff: -8, pitchOff: -1.0, words: [
+            'dark','shadow','shadows','creak','creaked','silence','alone','ghost','haunted',
+            'afraid','fear','cold','shiver','pale','mysterious','eerie','gloomy','dread',
+            'trembled','shook','nightmare','lurk','lurking','monster','creature','terrified',
+            'screamed','screech','howled','howl','fog','mist','strange','hollow','damp','chill'
+        ]},
+        { name: 'ACTION', rateOff: +6, pitchOff: +0.5, words: [
+            'ran','sprint','sprinted','chase','chased','fought','fight','battle','crash',
+            'boom','blast','explode','exploded','jump','jumped','leap','leapt','dash','dashed',
+            'race','raced','rush','rushed','quick','suddenly','attack','attacked','escape',
+            'escaped','danger','burst','hurled','flung','ducked','dodged','roared'
+        ]},
+        { name: 'HAPPY', rateOff: +4, pitchOff: +1.0, words: [
+            'laugh','laughed','smile','smiled','joy','joyful','happy','happiness','celebrate',
+            'wonderful','amazing','fantastic','brilliant','excited','delight','delighted',
+            'cheer','cheered','giggle','giggled','splendid','lovely','sunshine','dance',
+            'danced','sing','sang','party','hooray','beamed','gleamed','sparkled'
+        ]},
+        { name: 'CALM', rateOff: -4, pitchOff: -0.5, words: [
+            'quiet','peaceful','gentle','softly','slowly','dreamed','drifted','whispered',
+            'sighed','breathed','still','calm','sleep','sleepy','dusk','evening','twilight',
+            'stars','moonlight','moon','safe','warm','cozy','cosy','nestled','settled',
+            'murmured','lullaby','drowsy','hummed','rested'
+        ]}
+      ];
+      var lower = paraText.toLowerCase();
+      var best = null, bestScore = 0;
+      for (var mi = 0; mi < MOODS.length; mi++) {
+        var m = MOODS[mi], score = 0, seen = {};
+        for (var wi = 0; wi < m.words.length; wi++) {
+          var w = m.words[wi];
+          if (!seen[w] && lower.indexOf(w) !== -1) { score++; seen[w] = true; }
+        }
+        if (score > bestScore) { bestScore = score; best = m; }
+      }
+      var rateOff  = (best && bestScore >= 2) ? best.rateOff  : 0;
+      var pitchOff = (best && bestScore >= 2) ? best.pitchOff : 0;
+      var finalRate  = Math.min(115, Math.max(65, baseRate + rateOff));
+      var finalPitch = basePitch + pitchOff;
+      var pitchStr = finalPitch === 0 ? '0st' : (finalPitch > 0 ? '+' : '') + finalPitch.toFixed(1) + 'st';
+      return { rate: finalRate + '%', pitch: pitchStr };
+    }
+
     // Returns inner SSML content for one paragraph (no <speak> wrapper)
     function paragraphInnerSsml(para) {
       var raw = wrapDialogue(escXml(para));
@@ -1290,17 +1340,20 @@
     }
 
     // Builds one merged SSML chunk from a group of paragraphs
+    // Each paragraph gets its own mood-adjusted prosody wrapper (1800ms paragraph breaks)
     function buildSsmlChunk(paraGroup) {
-      var rate    = isFrench ? '91%' : '88%';
-      var pauseMs = isStudio ? '1200ms' : '900ms';
-      var inner   = paraGroup.map(paragraphInnerSsml).join('<break time="1200ms"/>');
-      if (isStudio) {
-        return { type: 'ssml', value: '<speak><prosody rate="' + rate + '">'
-          + inner + '<break time="' + pauseMs + '"/></prosody></speak>' };
-      }
-      var pitch = isFrench ? '-0.5st' : '-1st';
-      return { type: 'ssml', value: '<speak><prosody rate="' + rate + '" pitch="' + pitch + '">'
-        + inner + '<break time="' + pauseMs + '"/></prosody></speak>' };
+      var parts = paraGroup.map(function(para) {
+        var mood  = detectParagraphMood(para);
+        var inner = paragraphInnerSsml(para);
+        if (isStudio) {
+          return '<prosody rate="' + mood.rate + '">' + inner + '</prosody>';
+        }
+        return '<prosody rate="' + mood.rate + '" pitch="' + mood.pitch + '">' + inner + '</prosody>';
+      });
+      return { type: 'ssml', value: '<speak>'
+        + parts.join('<break time="1800ms"/>')
+        + '<break time="900ms"/>'
+        + '</speak>' };
     }
 
     // Processes one paragraph's text for Journey voices (plain text with pause tricks)
@@ -1320,12 +1373,12 @@
       s = s.replace(/U\.K\./g, 'U§K§');
       s = s.replace(/E\.U\./g, 'E§U§');
       s = s.replace(/U\.N\./g, 'U§N§');
-      s = s.replace(/\.\s+/g,    '...   ');
+      s = s.replace(/\.\s+/g,    '......   ');
       s = s.replace(/\?\s+/g,    '?..   ');
       s = s.replace(/!\s+/g,     '!..   ');
       s = s.replace(/,\s+/g,     ',  ');
       s = s.replace(/;\s+/g,     ',...  ');
-      s = s.replace(/\u2014/g,   ',  ');
+      s = s.replace(/\u2014/g,   ',....  ');
       s = s.replace(/\.\.\.\s*/g,'......  ');
       // Restore as spoken words — no period means Google's NLP won't pause mid-name
       s = s.replace(/Mr§/g,   'Mister ');
@@ -1428,25 +1481,25 @@
     // ── "The End" finale ────────────────────────────────────────────────────
     if (isJourney) {
       chunks.push({ type: 'silence', durationMs: 2000 });
-      chunks.push({ type: 'text', value: '..........   The...   End...' });
+      chunks.push({ type: 'text', value: '..........     The.....   End.....' });
     } else if (isStudio) {
       chunks.push({ type: 'silence', durationMs: 800 });
       chunks.push({ type: 'ssml', value: '<speak>'
         + '<break time="2000ms"/>'
-        + '<prosody rate="58%">'
-        + 'The<break time="400ms"/> End.'
+        + '<prosody rate="55%" volume="-2dB">'
+        + 'The<break time="600ms"/> End.'
         + '</prosody>'
-        + '<break time="800ms"/>'
+        + '<break time="1500ms"/>'
         + '</speak>' });
     } else {
       chunks.push({ type: 'silence', durationMs: 800 });
       var theEndPitch = isChinese ? '-1st' : '-3st';
       chunks.push({ type: 'ssml', value: '<speak>'
         + '<break time="2000ms"/>'
-        + '<prosody rate="58%" pitch="' + theEndPitch + '">'
-        + 'The<break time="400ms"/> End.'
+        + '<prosody rate="55%" pitch="' + theEndPitch + '" volume="-2dB">'
+        + 'The<break time="600ms"/> End.'
         + '</prosody>'
-        + '<break time="800ms"/>'
+        + '<break time="1500ms"/>'
         + '</speak>' });
     }
 
