@@ -1093,9 +1093,17 @@
       narrationAbortController = null;
       setupAudioPlayer(result.url);
       if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
-      document.getElementById('nowReading').textContent = result.warnings > 0
-        ? 'Ready — ▶  ⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' could not load'
-        : 'Ready — press ▶ to begin';
+      if (result.warnings > 0) {
+        document.getElementById('nowReading').textContent =
+          '⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' failed to load — press ▶ or retry';
+        if (lnr) {
+          lnr.style.display = 'block';
+          var retryBtn = document.getElementById('loadNarrationBtn');
+          if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = '🔄 Retry narration'; }
+        }
+      } else {
+        document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
+      }
     })
     .catch(function(err) {
       narrationAbortController = null;
@@ -1234,11 +1242,10 @@
       var baseRate  = isFrench ? 91 : 88;
       var basePitch = isFrench ? -0.5 : -1.0;
       var MOODS = [
-        { name: 'TENSE', rateOff: -8, pitchOff: -1.0, words: [
-            'dark','shadow','shadows','creak','creaked','silence','alone','ghost','haunted',
-            'afraid','fear','cold','shiver','pale','mysterious','eerie','gloomy','dread',
-            'trembled','shook','nightmare','lurk','lurking','monster','creature','terrified',
-            'screamed','screech','howled','howl','fog','mist','strange','hollow','damp','chill'
+        { name: 'TENSE', rateOff: -5, pitchOff: -0.5, words: [
+            'ghost','haunted','afraid','fear','nightmare','monster','creature',
+            'terrified','screamed','screech','howled','howl','eerie','gloomy',
+            'dread','trembled','lurk','lurking'
         ]},
         { name: 'ACTION', rateOff: +6, pitchOff: +0.5, words: [
             'ran','sprint','sprinted','chase','chased','fought','fight','battle','crash',
@@ -1269,8 +1276,8 @@
         }
         if (score > bestScore) { bestScore = score; best = m; }
       }
-      var rateOff  = (best && bestScore >= 2) ? best.rateOff  : 0;
-      var pitchOff = (best && bestScore >= 2) ? best.pitchOff : 0;
+      var rateOff  = (best && bestScore >= 3) ? best.rateOff  : 0;
+      var pitchOff = (best && bestScore >= 3) ? best.pitchOff : 0;
       var finalRate  = Math.min(115, Math.max(65, baseRate + rateOff));
       var finalPitch = basePitch + pitchOff;
       var pitchStr = finalPitch === 0 ? '0st' : (finalPitch > 0 ? '+' : '') + finalPitch.toFixed(1) + 'st';
@@ -1295,7 +1302,7 @@
         return '<prosody rate="' + mood.rate + '" pitch="' + mood.pitch + '">' + inner + '</prosody>';
       });
       return { type: 'ssml', value: '<speak>'
-        + parts.join('<break time="1800ms"/>')
+        + parts.join('<break time="3600ms"/>')
         + '<break time="900ms"/>'
         + '</speak>' };
     }
@@ -1340,7 +1347,7 @@
 
     // Builds one merged Journey chunk from a group of paragraphs
     function buildJourneyChunk(paraGroup) {
-      return { type: 'text', value: paraGroup.map(processJourneyText).join('......    ') };
+      return { type: 'text', value: paraGroup.map(processJourneyText).join('............        ') };
     }
 
     // Chinese paragraph SSML (character-by-character punctuation handling)
@@ -1406,7 +1413,7 @@
       if (paras.length === 0) paras = [text.trim()];
       var paraLensS = paras.map(function(p){ return paragraphInnerSsml(p.trim()).length; });
       var totalLenS = paraLensS.reduce(function(a, b){ return a + b; }, 0);
-      var sHardMax = 4500, sTarget = 2800;
+      var sHardMax = 3500, sTarget = 2000;
       var sNumChunks = Math.max(1, Math.ceil(totalLenS / sTarget));
       var sTargetPer = Math.ceil(totalLenS / sNumChunks);
       var group = [], groupLen = 0;
@@ -1532,28 +1539,31 @@
     var promises = chunks.map(function(chunk, idx) {
       var ti = chunkTextIdx[idx];
       if (chunk.type === 'silence') {
-        var sr = 24000, n = Math.floor(sr * chunk.durationMs / 1000);
-        return Promise.resolve(audioCtx.createBuffer(1, n, sr));
+        var n = Math.floor(audioCtx.sampleRate * chunk.durationMs / 1000);
+        return Promise.resolve(audioCtx.createBuffer(1, n, audioCtx.sampleRate));
       }
       return withTimeout(fetchChunkWithRetry(chunk, ti, 3, 1000), 30000)
         .catch(function(err) {
           if (err.name === 'AbortError') throw err;
           chunkWarnings++;
           addPhase(ti, 1.0 - progressWeights[ti]); // mark complete even on failure
-          var sr = 24000, n = sr * 5; // ~5 s silence in place of failed chunk
-          return audioCtx.createBuffer(1, n, sr);
+          var n = Math.round(audioCtx.sampleRate * 5); // ~5 s silence at correct sample rate
+          return audioCtx.createBuffer(1, n, audioCtx.sampleRate);
         });
     });
 
     return Promise.all(promises).then(function(buffers) {
-      var totalLength = buffers.reduce(function(sum, b){ return sum + b.length; }, 0);
-      var sampleRate  = buffers[0].sampleRate;
-      var numChannels = buffers[0].numberOfChannels;
-      var combined    = audioCtx.createBuffer(numChannels, totalLength, sampleRate);
+      var ctxRate    = audioCtx.sampleRate;
+      var numChannels = buffers.reduce(function(max, b){ return Math.max(max, b.numberOfChannels); }, 1);
+      var totalLength = buffers.reduce(function(sum,  b){ return sum + b.length; }, 0);
+      var combined    = audioCtx.createBuffer(numChannels, totalLength, ctxRate);
       var offset = 0;
       buffers.forEach(function(buf) {
         for (var ch = 0; ch < numChannels; ch++) {
-          combined.getChannelData(ch).set(buf.getChannelData(ch), offset);
+          if (ch < buf.numberOfChannels) {
+            combined.getChannelData(ch).set(buf.getChannelData(ch), offset);
+          }
+          // channels absent in this buffer stay zero (silence)
         }
         offset += buf.length;
       });
