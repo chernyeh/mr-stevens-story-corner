@@ -344,22 +344,30 @@
   </div>
 
 <script>
-  // ── KEYS ──────────────────────────────────────────────────────────────────
-  var ANTHROPIC_KEY  = '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';
-  var GOOGLE_TTS_KEY = 'AIzaSyBzs3xuCmmsTHDX9pCj05STWuHGBFE5Aow';
-
   // ── STATE ─────────────────────────────────────────────────────────────────
   var selectedAge   = null;
   var selectedStyle = null;
   var selectedLang  = 'en';
   var speechRate    = 0.95;
   var fullStoryText = '';
-  var currentAudio  = null;
   var pendingNarrationVoice = null;
   var pendingNarrationTitle = '';
   var narrationAbortController = null;
   var previewAudio = null;
   var builderSelections = { character: '', setting: '', twist: '', ending: '' };
+
+  // ── STREAMING PLAYER STATE ─────────────────────────────────────────────────
+  var streamCtx          = null;   // AudioContext for playback
+  var streamBuffers      = [];     // decoded AudioBuffer per chunk index
+  var streamChunkOffsets = [];     // cumulative start-second of each chunk
+  var streamTotalDuration= 0;      // total decoded seconds so far
+  var streamNextSchedule = 0;      // index of next chunk to schedule (in-order)
+  var streamScheduledEnd = 0;      // audioCtx time when last scheduled chunk ends
+  var streamPlayStartedAt= 0;      // audioCtx.currentTime anchor for progress
+  var streamNodes        = [];     // active AudioBufferSourceNodes
+  var streamIsPlaying    = false;
+  var streamPauseOffset  = 0;      // elapsed seconds when last paused
+  var rafId              = null;   // requestAnimationFrame handle
 
   // ── VOICES ────────────────────────────────────────────────────────────────
   var VOICES = {
@@ -1071,6 +1079,9 @@
     narrationAbortController = new AbortController();
     var signal = narrationAbortController.signal;
 
+    // Tear down any previous stream
+    resetStreamState();
+
     var voice      = pendingNarrationVoice;
     var storyTitle = pendingNarrationTitle;
     var text       = fullStoryText;
@@ -1084,26 +1095,36 @@
     document.getElementById('nowReading').textContent = '🎙️ Loading narration…';
 
     function updateProgress(done, total) {
-      document.getElementById('nowReading').textContent =
-        '🎙️ Loading… ' + done + ' of ' + total + ' sections ready';
+      if (!streamIsPlaying) {
+        document.getElementById('nowReading').textContent =
+          'Ready — press ▶ (' + done + ' of ' + total + ' loaded)';
+      }
     }
 
-    generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal)
+    generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress,
+      function onStart(total) {
+        initStreamPlayer(total);
+      },
+      function onChunk(buffer, idx) {
+        onChunkDecodedForStream(buffer, idx);
+      },
+      signal)
     .then(function(result) {
       narrationAbortController = null;
-      setupAudioPlayer(result.url);
-      if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
       if (result.warnings > 0) {
-        document.getElementById('nowReading').textContent =
-          '⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' failed to load — press ▶ or retry';
+        if (!streamIsPlaying) {
+          document.getElementById('nowReading').textContent =
+            '⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' failed to load — press ▶ or retry';
+        }
         if (lnr) {
           lnr.style.display = 'block';
           var retryBtn = document.getElementById('loadNarrationBtn');
           if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = '🔄 Retry narration'; }
         }
-      } else {
+      } else if (!streamIsPlaying) {
         document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
       }
+      document.getElementById('totalTime').textContent = formatTime(streamTotalDuration);
     })
     .catch(function(err) {
       narrationAbortController = null;
@@ -1119,15 +1140,37 @@
   }
 
   function seekAudio(seconds) {
-    if (!currentAudio) return;
-    var t = currentAudio.currentTime + seconds;
-    if (t < 0) t = 0;
-    if (currentAudio.duration && t > currentAudio.duration) t = currentAudio.duration;
-    currentAudio.currentTime = t;
+    if (!streamCtx) return;
+    var current = streamIsPlaying
+      ? (streamCtx.currentTime - streamPlayStartedAt)
+      : streamPauseOffset;
+    var target = Math.max(0, Math.min(current + seconds, streamTotalDuration));
+    rescheduleFrom(target);
+    if (!streamIsPlaying) streamPauseOffset = target;
+  }
+
+  // ── CONCURRENCY LIMITER ───────────────────────────────────────────────────
+  function runWithConcurrency(taskFns, limit) {
+    var results = new Array(taskFns.length);
+    var active = 0, index = 0;
+    return new Promise(function(resolve, reject) {
+      function next() {
+        if (index === taskFns.length && active === 0) { resolve(results); return; }
+        while (active < limit && index < taskFns.length) {
+          (function(i) {
+            active++;
+            taskFns[i]()
+              .then(function(r) { results[i] = r; active--; next(); })
+              .catch(reject);
+          })(index++);
+        }
+      }
+      next();
+    });
   }
 
   // ── GOOGLE TTS ────────────────────────────────────────────────────────────
-  function generateGoogleAudio(text, voiceId, languageCode, storyTitle, onProgress, signal) {
+  function generateGoogleAudio(text, voiceId, languageCode, storyTitle, onProgress, onStart, onChunkDecoded, signal) {
     var isChinese = (languageCode === 'cmn-CN');
     var isFrench  = (languageCode === 'fr-FR' || languageCode === 'fr-CA');
     var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
@@ -1456,6 +1499,9 @@
 
     if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
 
+    // Notify caller of total chunk count before any fetching begins
+    if (typeof onStart === 'function') onStart(chunks.length);
+
     // ── Audio config ────────────────────────────────────────────────────────
     var effectiveSpeechRate = isJourney ? speechRate * 0.82
                             : isStudio   ? speechRate * 0.90
@@ -1502,7 +1548,7 @@
     }
 
     // Fetch one chunk with exponential-backoff retry (up to 3 retries)
-    var TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY;
+    var TTS_URL = '/api/tts';
     function fetchChunkWithRetry(chunk, ti, retriesLeft, delay) {
       var reqBody = {
         input: chunk.type === 'ssml' ? { ssml: chunk.value } : { text: chunk.value },
@@ -1536,129 +1582,199 @@
     // Count chunk failures for graceful degradation
     var chunkWarnings = 0;
 
-    var promises = chunks.map(function(chunk, idx) {
-      var ti = chunkTextIdx[idx];
-      if (chunk.type === 'silence') {
-        var n = Math.floor(audioCtx.sampleRate * chunk.durationMs / 1000);
-        return Promise.resolve(audioCtx.createBuffer(1, n, audioCtx.sampleRate));
-      }
-      return withTimeout(fetchChunkWithRetry(chunk, ti, 3, 1000), 30000)
-        .catch(function(err) {
-          if (err.name === 'AbortError') throw err;
-          chunkWarnings++;
-          addPhase(ti, 1.0 - progressWeights[ti]); // mark complete even on failure
-          var n = Math.round(audioCtx.sampleRate * 5); // ~5 s silence at correct sample rate
-          return audioCtx.createBuffer(1, n, audioCtx.sampleRate);
-        });
+    // Build tasks (max 3 concurrent) — fire onChunkDecoded as each resolves in-order
+    var taskFns = chunks.map(function(chunk, idx) {
+      return function() {
+        var ti = chunkTextIdx[idx];
+        if (chunk.type === 'silence') {
+          var n = Math.floor(audioCtx.sampleRate * chunk.durationMs / 1000);
+          var silBuf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+          if (typeof onChunkDecoded === 'function') onChunkDecoded(silBuf, idx);
+          return Promise.resolve(silBuf);
+        }
+        return withTimeout(fetchChunkWithRetry(chunk, ti, 3, 1000), 30000)
+          .then(function(decoded) {
+            if (typeof onChunkDecoded === 'function') onChunkDecoded(decoded, idx);
+            return decoded;
+          })
+          .catch(function(err) {
+            if (err.name === 'AbortError') throw err;
+            chunkWarnings++;
+            addPhase(ti, 1.0 - progressWeights[ti]);
+            var n = Math.round(audioCtx.sampleRate * 5);
+            var silBuf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+            if (typeof onChunkDecoded === 'function') onChunkDecoded(silBuf, idx);
+            return silBuf;
+          });
+      };
     });
 
-    return Promise.all(promises).then(function(buffers) {
-      var ctxRate    = audioCtx.sampleRate;
-      var numChannels = buffers.reduce(function(max, b){ return Math.max(max, b.numberOfChannels); }, 1);
-      var totalLength = buffers.reduce(function(sum,  b){ return sum + b.length; }, 0);
-      var combined    = audioCtx.createBuffer(numChannels, totalLength, ctxRate);
-      var offset = 0;
-      buffers.forEach(function(buf) {
-        for (var ch = 0; ch < numChannels; ch++) {
-          if (ch < buf.numberOfChannels) {
-            combined.getChannelData(ch).set(buf.getChannelData(ch), offset);
-          }
-          // channels absent in this buffer stay zero (silence)
-        }
-        offset += buf.length;
-      });
-      var wavBlob = audioBufferToWav(combined);
+    return runWithConcurrency(taskFns, 3).then(function() {
       audioCtx.close();
-      return { url: URL.createObjectURL(wavBlob), warnings: chunkWarnings };
+      return { warnings: chunkWarnings };
     }).catch(function(err) {
       audioCtx.close();
       throw err;
     });
   }
 
-  // Convert AudioBuffer to WAV Blob
-  function audioBufferToWav(buffer) {
-    var numCh  = buffer.numberOfChannels;
-    var sr     = buffer.sampleRate;
-    var len    = buffer.length;
-    var bps    = 2; // 16-bit
-    var ab     = new ArrayBuffer(44 + len * numCh * bps);
-    var view   = new DataView(ab);
-    function writeStr(o, s) { for (var i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); }
-    writeStr(0, 'RIFF');
-    view.setUint32(4,  36 + len * numCh * bps, true);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1,  true);
-    view.setUint16(22, numCh, true);
-    view.setUint32(24, sr, true);
-    view.setUint32(28, sr * numCh * bps, true);
-    view.setUint16(32, numCh * bps, true);
-    view.setUint16(34, 16, true);
-    writeStr(36, 'data');
-    view.setUint32(40, len * numCh * bps, true);
-    var offset = 44;
-    for (var i = 0; i < len; i++) {
-      for (var ch = 0; ch < numCh; ch++) {
-        var s = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
-        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-        offset += 2;
-      }
-    }
-    return new Blob([ab], { type: 'audio/wav' });
+  // ── STREAMING AUDIO PLAYER ────────────────────────────────────────────────
+
+  function resetStreamState() {
+    if (streamCtx) { try { streamCtx.close(); } catch(e) {} streamCtx = null; }
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    streamNodes         = [];
+    streamBuffers       = [];
+    streamChunkOffsets  = [];
+    streamTotalDuration = 0;
+    streamNextSchedule  = 0;
+    streamScheduledEnd  = 0;
+    streamPlayStartedAt = 0;
+    streamIsPlaying     = false;
+    streamPauseOffset   = 0;
   }
 
-  // ── AUDIO PLAYER ──────────────────────────────────────────────────────────
-  function setAudioLoading(isLoading) {
-    var playBtn = document.getElementById('playBtn');
-    var st      = document.getElementById('audioStatus');
-    if (isLoading) {
-      playBtn.disabled = true; playBtn.style.opacity = '0.4';
-      if (st) { st.style.display = 'flex'; st.textContent = 'Preparing audio...'; }
-      document.getElementById('nowReading').textContent = 'Generating narration...';
-    } else {
-      playBtn.disabled = false; playBtn.style.opacity = '1';
-      if (st) st.style.display = 'none';
-      document.getElementById('nowReading').textContent = 'Audio ready - press play to begin';
+  function initStreamPlayer(totalChunks) {
+    resetStreamState();
+    streamCtx = new (window.AudioContext || window.webkitAudioContext)();
+    streamCtx.suspend();
+    streamBuffers      = new Array(totalChunks);
+    streamChunkOffsets = new Array(totalChunks);
+    streamScheduledEnd = 0;
+  }
+
+  function onChunkDecodedForStream(buffer, index) {
+    streamBuffers[index] = buffer;
+
+    // Drain consecutive ready chunks in order so playback stays gapless
+    while (streamNextSchedule < streamBuffers.length &&
+           streamBuffers[streamNextSchedule] !== undefined) {
+      var buf = streamBuffers[streamNextSchedule];
+      streamChunkOffsets[streamNextSchedule] = streamTotalDuration;
+      streamTotalDuration += buf.duration;
+
+      // Schedule immediately if already playing
+      if (streamIsPlaying && streamCtx && streamCtx.state !== 'closed') {
+        var src = streamCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(streamCtx.destination);
+        src.start(streamScheduledEnd);
+        streamNodes.push(src);
+        streamScheduledEnd += buf.duration;
+      }
+      streamNextSchedule++;
+    }
+
+    // Update running total time display
+    var totalEl = document.getElementById('totalTime');
+    if (totalEl) totalEl.textContent = formatTime(streamTotalDuration);
+
+    // Unlock play button once first in-order chunk is ready
+    if (streamNextSchedule >= 1) {
+      var playBtn = document.getElementById('playBtn');
+      if (playBtn && playBtn.disabled) {
+        playBtn.disabled = false;
+        playBtn.style.opacity = '1';
+      }
     }
   }
-  function setupAudioPlayer(url) {
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-    currentAudio = new Audio(url);
-    currentAudio.addEventListener('timeupdate', function() {
-      if (!currentAudio.duration) return;
-      document.getElementById('progressFill').style.width = (currentAudio.currentTime / currentAudio.duration * 100) + '%';
-      document.getElementById('currentTime').textContent  = formatTime(currentAudio.currentTime);
-    });
-    currentAudio.addEventListener('loadedmetadata', function() {
-      document.getElementById('totalTime').textContent = formatTime(currentAudio.duration);
-    });
-    currentAudio.addEventListener('ended', function() {
-      document.getElementById('playBtn').textContent    = '\u25b6';
-      document.getElementById('nowReading').textContent = 'Story complete';
-      document.getElementById('progressFill').style.width = '100%';
+
+  function rescheduleFrom(fromSeconds) {
+    if (!streamCtx) return;
+    streamNodes.forEach(function(n) { try { n.stop(0); } catch(e) {} });
+    streamNodes = [];
+    streamScheduledEnd = streamCtx.currentTime + 0.05;
+
+    for (var i = 0; i < streamNextSchedule; i++) {
+      var buf        = streamBuffers[i];
+      var chunkStart = streamChunkOffsets[i];
+      var chunkEnd   = chunkStart + buf.duration;
+      if (chunkEnd <= fromSeconds) continue;
+
+      var offsetInChunk = Math.max(0, fromSeconds - chunkStart);
+      var schedAt = (chunkStart >= fromSeconds)
+        ? streamScheduledEnd + (chunkStart - fromSeconds)
+        : streamScheduledEnd;
+
+      var src = streamCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(streamCtx.destination);
+      src.start(schedAt, offsetInChunk);
+      streamNodes.push(src);
+      streamScheduledEnd = Math.max(streamScheduledEnd,
+        schedAt + buf.duration - offsetInChunk);
+    }
+    streamPlayStartedAt = streamCtx.currentTime - fromSeconds;
+  }
+
+  function startProgressRaf() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(function tick() {
+      if (!streamCtx || !streamIsPlaying) return;
+      var elapsed = Math.max(0,
+        Math.min(streamCtx.currentTime - streamPlayStartedAt, streamTotalDuration));
+      if (streamTotalDuration > 0) {
+        document.getElementById('progressFill').style.width =
+          (elapsed / streamTotalDuration * 100) + '%';
+      }
+      document.getElementById('currentTime').textContent = formatTime(elapsed);
+      // Detect natural end
+      if (elapsed >= streamTotalDuration && streamTotalDuration > 0 &&
+          streamNextSchedule >= streamBuffers.length) {
+        document.getElementById('playBtn').textContent    = '\u25b6';
+        document.getElementById('nowReading').textContent = 'Story complete';
+        document.getElementById('progressFill').style.width = '100%';
+        streamIsPlaying = false;
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
     });
   }
+
   function togglePlay() {
-    if (!currentAudio) return;
-    if (currentAudio.paused) {
-      currentAudio.play();
+    if (!streamCtx) return;
+    if (!streamIsPlaying) {
+      // First play: schedule all ready chunks then resume
+      if (streamNextSchedule > 0 && streamNodes.length === 0) {
+        streamScheduledEnd = streamCtx.currentTime + 0.05;
+        for (var i = 0; i < streamNextSchedule; i++) {
+          var src = streamCtx.createBufferSource();
+          src.buffer = streamBuffers[i];
+          src.connect(streamCtx.destination);
+          src.start(streamScheduledEnd);
+          streamNodes.push(src);
+          streamScheduledEnd += streamBuffers[i].duration;
+        }
+        streamPlayStartedAt = streamCtx.currentTime - streamPauseOffset;
+      }
+      streamCtx.resume();
+      streamIsPlaying = true;
       document.getElementById('playBtn').textContent    = '\u23f8';
       document.getElementById('nowReading').textContent = 'Now playing...';
+      startProgressRaf();
     } else {
-      currentAudio.pause();
+      streamPauseOffset = streamCtx.currentTime - streamPlayStartedAt;
+      streamCtx.suspend();
+      streamIsPlaying = false;
       document.getElementById('playBtn').textContent    = '\u25b6';
-      document.getElementById('nowReading').textContent = 'Paused - press play to continue';
+      document.getElementById('nowReading').textContent = 'Paused — press \u25b6 to continue';
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     }
   }
+
   function stopReading() {
-    if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
+    if (!streamCtx) return;
+    streamCtx.suspend();
+    streamIsPlaying   = false;
+    streamPauseOffset = 0;
+    rescheduleFrom(0);
     document.getElementById('playBtn').textContent      = '\u25b6';
     document.getElementById('progressFill').style.width = '0%';
     document.getElementById('currentTime').textContent  = '0:00';
     document.getElementById('nowReading').textContent   = 'Press play to begin narration';
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
   }
+
   function previewVoice() {
     var btn = document.getElementById('previewVoiceBtn');
     if (!btn || btn.disabled) return;
@@ -1691,7 +1807,7 @@
         effectsProfileId: ['headphone-class-device']
       }
     };
-    fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY, {
+    fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reqBody)
@@ -1721,7 +1837,7 @@
     var voice   = null;
     voices.forEach(function(v) { if (v.id === voiceId) voice = v; });
     if (!voice) return;
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    resetStreamState();
     pendingNarrationVoice = voice;
     var titleEl = document.getElementById('storyTitle');
     pendingNarrationTitle = titleEl ? titleEl.textContent : '';
@@ -1729,7 +1845,7 @@
   }
   function newStory() {
     if (narrationAbortController) { narrationAbortController.abort(); narrationAbortController = null; }
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    resetStreamState();
     document.getElementById('storyCard').classList.remove('visible');
     document.getElementById('setupSection').style.display = 'block';
     selectedAge = null; selectedStyle = null; fullStoryText = '';
@@ -1757,7 +1873,7 @@
       speedSlider.addEventListener('input', function() { updateSpeedSlider(speedSlider.value); });
       speedSlider.addEventListener('change', function() {
         if (!fullStoryText) return;
-        if (currentAudio) currentAudio.pause();
+        resetStreamState();
         loadNarration();
       });
     }
@@ -1765,9 +1881,12 @@
     if (liveVoice) liveVoice.addEventListener('change', changeVoiceLive);
     var progressBg = document.getElementById('progressBg');
     if (progressBg) progressBg.addEventListener('click', function(e) {
-      if (!currentAudio || !currentAudio.duration) return;
-      var rect = progressBg.getBoundingClientRect();
-      currentAudio.currentTime = ((e.clientX - rect.left) / rect.width) * currentAudio.duration;
+      if (!streamCtx || streamTotalDuration === 0) return;
+      var rect   = progressBg.getBoundingClientRect();
+      var target = ((e.clientX - rect.left) / rect.width) * streamTotalDuration;
+      rescheduleFrom(target);
+      streamPlayStartedAt = streamCtx.currentTime - target;
+      if (!streamIsPlaying) streamPauseOffset = target;
     });
     var themeInput = document.getElementById('themeInput');
     if (themeInput) themeInput.addEventListener('input', function() { if (selectedAge) renderBuilder(); });
