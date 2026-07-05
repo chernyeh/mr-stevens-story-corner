@@ -397,7 +397,7 @@
     en: {
       name: 'English', defaultVoice: 'en-GB-Journey-F', defaultRate: 0.95,
       promptInstruction: 'Write the entire story in English.',
-      narratorNote: 'Use commas for natural spoken pauses, em-dashes for dramatic pauses. End every sentence with a full stop, exclamation mark, or question mark. Start a new paragraph for each new moment or scene shift.'
+      narratorNote: 'Use commas for natural spoken pauses, em-dashes for dramatic pauses, and the occasional ellipsis (...) for a trailing, thoughtful pause. A few times per story, wrap one important word in *asterisks* for emphasis (e.g., "It was *impossible*") and use a rare parenthetical aside for a wry, knowing remark (e.g., "(though he would never admit it)"). When a character is small, young, or excitable, use dialogue-tag verbs like squeaked or cried; for a giant, monster, or elder, use rumbled or growled - these verbs shape how their voice sounds when read aloud. End every sentence with a full stop, exclamation mark, or question mark. Start a new paragraph for each new moment or scene shift.'
     },
     fr: {
       name: 'French', defaultVoice: 'fr-FR-Studio-A', defaultRate: 0.78,
@@ -1212,16 +1212,40 @@
       return s;
     }
 
+    // Master Storyteller cadence: dialogue-tag keyword scan for character-voice pitch shifts
+    var HIGH_PITCH_DIALOGUE_WORDS = ['squeaked', 'cried', 'child', 'goblin'];
+    var LOW_PITCH_DIALOGUE_WORDS  = ['rumbled', 'growled', 'giant', 'old'];
+    var DIALOGUE_CONTEXT_WINDOW   = 60; // chars scanned each side of a quote for attribution verbs
+
+    function classifyDialogueContext(context) {
+      var lower = context.toLowerCase();
+      var i;
+      for (i = 0; i < HIGH_PITCH_DIALOGUE_WORDS.length; i++) {
+        if (new RegExp('\\b' + HIGH_PITCH_DIALOGUE_WORDS[i] + '\\b').test(lower)) return 'high';
+      }
+      for (i = 0; i < LOW_PITCH_DIALOGUE_WORDS.length; i++) {
+        if (new RegExp('\\b' + LOW_PITCH_DIALOGUE_WORDS[i] + '\\b').test(lower)) return 'low';
+      }
+      return 'neutral';
+    }
+
     // Wrap dialogue quotes and speech-attribution verbs in prosody
     function wrapDialogue(s) {
-      // Step 1: wrap quoted speech in faster/brighter delivery
-      if (isStudio) {
-        s = s.replace(/(“[^”]{1,300}”)/g,
-          '<prosody rate="105%">$1</prosody>');
-      } else {
-        s = s.replace(/(“[^”]{1,300}”)/g,
-          '<prosody rate="105%" pitch="+0.8st">$1</prosody>');
-      }
+      // Step 1: pitch/rate-shift quoted speech based on nearby dialogue-tag keywords.
+      // Studio voices don't honor the pitch attribute, so they lean on a wider rate swing instead.
+      s = s.replace(/“[^”]{1,300}”/g, function(quote, offset, full) {
+        var before = full.slice(Math.max(0, offset - DIALOGUE_CONTEXT_WINDOW), offset);
+        var after  = full.slice(offset + quote.length, offset + quote.length + DIALOGUE_CONTEXT_WINDOW);
+        var mood   = classifyDialogueContext(before + ' ' + after);
+        if (isStudio) {
+          if (mood === 'high') return '<prosody rate="130%">' + quote + '</prosody>';
+          if (mood === 'low')  return '<prosody rate="78%">'  + quote + '</prosody>';
+          return '<prosody rate="105%">' + quote + '</prosody>';
+        }
+        if (mood === 'high') return '<prosody pitch="+2st" rate="122%">' + quote + '</prosody>';
+        if (mood === 'low')  return '<prosody pitch="-3st" rate="82%">'  + quote + '</prosody>';
+        return '<prosody rate="105%" pitch="+0.8st">' + quote + '</prosody>';
+      });
       // Step 2: slow the attribution verb after the closing quote
       // Pattern A: </prosody>[space/punct] said/asked/etc — e.g. "Hello," said Tom
       var attrA = /(\/prosody>)([\s,!?.]*)(said|asked|whispered|shouted|replied|called|murmured|cried|exclaimed|answered|announced|added|continued|explained|insisted|laughed|muttered|pleaded|promised|suggested|warned|wondered)(\s)/g;
@@ -1284,9 +1308,20 @@
       return { rate: finalRate + '%', pitch: pitchStr };
     }
 
+    // Theatrical emphasis (*word*) and wry, hushed parenthetical asides
+    function applyEmphasisAndAsides(s) {
+      s = s.replace(/\*([^*\n]+?)\*/g, '<emphasis level="strong">$1</emphasis>');
+      // Any unpaired asterisk left over (stray markdown) would otherwise be read aloud literally
+      s = s.replace(/\*/g, '');
+      s = s.replace(/\(([^()]*)\)/g, isStudio
+        ? '<prosody volume="-4dB">($1)</prosody>'
+        : '<prosody pitch="-1st" volume="-4dB">($1)</prosody>');
+      return s;
+    }
+
     // Returns inner SSML content for one paragraph (no <speak> wrapper)
     function paragraphInnerSsml(para) {
-      var raw = wrapDialogue(escXml(para));
+      var raw = applyEmphasisAndAsides(wrapDialogue(escXml(para)));
       return addBreaks(raw);
     }
 
@@ -1310,6 +1345,9 @@
     // Processes one paragraph's text for Journey voices (plain text with pause tricks)
     function processJourneyText(para) {
       var s = para;
+      // Journey has no SSML/markdown support - drop *emphasis* asterisks so it
+      // isn't tempted to speak them literally; the surrounding words still carry the weight.
+      s = s.replace(/\*([^*\n]+?)\*/g, '$1').replace(/\*/g, '');
       s = s.replace(/\bUS\b/g, 'U.S.');
       s = s.replace(/\bUK\b/g, 'U.K.');
       s = s.replace(/\bEU\b/g, 'E.U.');
