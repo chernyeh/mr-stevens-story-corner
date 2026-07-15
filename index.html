@@ -1109,22 +1109,38 @@
         '🎙️ Loading… ' + done + ' of ' + total + ' sections ready';
     }
 
-    generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal)
-    .then(function(result) {
-      narrationAbortController = null;
-      setupAudioPlayer(result.url);
-      if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
-      if (result.warnings > 0) {
-        document.getElementById('nowReading').textContent =
-          '⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' failed to load — press ▶ or retry';
-        if (lnr) {
-          lnr.style.display = 'block';
-          var retryBtn = document.getElementById('loadNarrationBtn');
-          if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = '🔄 Retry narration'; }
-        }
-      } else {
+    var cacheKey = audioCacheKey(text, voice.id, storyTitle);
+
+    audioCacheGet(cacheKey).then(function(hit) {
+      if (signal.aborted) return;
+      if (hit && hit.blob) {
+        // Cache hit: no synthesis, no cost, instant playback
+        narrationAbortController = null;
+        setupAudioPlayer(URL.createObjectURL(hit.blob));
+        if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
         document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
+        return;
       }
+
+      return generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal)
+      .then(function(result) {
+        narrationAbortController = null;
+        setupAudioPlayer(result.url);
+        if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
+        if (result.warnings > 0) {
+          // Don't cache partial audio - a retry should re-synthesize
+          document.getElementById('nowReading').textContent =
+            '⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' failed to load — press ▶ or retry';
+          if (lnr) {
+            lnr.style.display = 'block';
+            var retryBtn = document.getElementById('loadNarrationBtn');
+            if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = '🔄 Retry narration'; }
+          }
+        } else {
+          audioCachePut(cacheKey, result.blob, result.timings);
+          document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
+        }
+      });
     })
     .catch(function(err) {
       narrationAbortController = null;
@@ -1145,6 +1161,69 @@
     if (t < 0) t = 0;
     if (currentAudio.duration && t > currentAudio.duration) t = currentAudio.duration;
     currentAudio.currentTime = t;
+  }
+
+  // ── AUDIO CACHE (IndexedDB) ───────────────────────────────────────────────
+  // Replays and voice re-selection of the same story cost nothing: finished
+  // narrations are cached locally, keyed by story + voice + pipeline version.
+  var AUDIO_CACHE_DB = 'mrStevens_audio';
+  var AUDIO_CACHE_STORE = 'narrations';
+  var AUDIO_CACHE_MAX = 8; // WAV blobs are big; keep only the most recent
+  var NARRATION_PIPELINE_V = 3; // bump to invalidate cached audio after pipeline changes
+
+  function openAudioCache() {
+    return new Promise(function(resolve, reject) {
+      if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+      var req = indexedDB.open(AUDIO_CACHE_DB, 1);
+      req.onupgradeneeded = function() {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(AUDIO_CACHE_STORE)) {
+          db.createObjectStore(AUDIO_CACHE_STORE, { keyPath: 'key' });
+        }
+      };
+      req.onsuccess = function() { resolve(req.result); };
+      req.onerror   = function() { reject(req.error); };
+    });
+  }
+
+  function audioCacheKey(text, voiceId, title) {
+    // djb2-style double hash - cheap, synchronous, good enough for cache keys
+    var s = NARRATION_PIPELINE_V + '|' + voiceId + '|' + narrationBaseRate + '|' + title + '|' + text;
+    var h1 = 5381, h2 = 52711;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i);
+      h1 = (Math.imul(h1, 33) ^ c) >>> 0;
+      h2 = (Math.imul(h2, 31) ^ c) >>> 0;
+    }
+    return h1.toString(36) + '-' + h2.toString(36) + '-' + s.length;
+  }
+
+  function audioCacheGet(key) {
+    return openAudioCache().then(function(db) {
+      return new Promise(function(resolve) {
+        var tx = db.transaction(AUDIO_CACHE_STORE, 'readonly');
+        var rq = tx.objectStore(AUDIO_CACHE_STORE).get(key);
+        rq.onsuccess = function() { resolve(rq.result || null); };
+        rq.onerror   = function() { resolve(null); };
+      });
+    }).catch(function() { return null; });
+  }
+
+  function audioCachePut(key, blob, timings) {
+    return openAudioCache().then(function(db) {
+      return new Promise(function(resolve) {
+        var tx = db.transaction(AUDIO_CACHE_STORE, 'readwrite');
+        var store = tx.objectStore(AUDIO_CACHE_STORE);
+        store.put({ key: key, blob: blob, timings: timings || null, t: Date.now() });
+        var all = store.getAll();
+        all.onsuccess = function() {
+          var entries = (all.result || []).sort(function(a, b) { return b.t - a.t; });
+          for (var i = AUDIO_CACHE_MAX; i < entries.length; i++) store.delete(entries[i].key);
+        };
+        tx.oncomplete = function() { resolve(); };
+        tx.onerror    = function() { resolve(); };
+      });
+    }).catch(function() { /* cache is best-effort */ });
   }
 
   // ── GOOGLE TTS ────────────────────────────────────────────────────────────
@@ -1673,7 +1752,7 @@
       });
       var wavBlob = audioBufferToWav(combined);
       audioCtx.close();
-      return { url: URL.createObjectURL(wavBlob), warnings: chunkWarnings };
+      return { url: URL.createObjectURL(wavBlob), blob: wavBlob, warnings: chunkWarnings };
     }).catch(function(err) {
       audioCtx.close();
       throw err;
