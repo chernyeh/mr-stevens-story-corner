@@ -92,6 +92,9 @@
   .story-text { font-family: 'Playfair Display',serif; font-size: 1.05rem; line-height: 1.9; color: #3a3228; margin-bottom: 32px; white-space: pre-wrap; }
   .story-para { margin: 0 0 1.15em; white-space: pre-wrap; border-radius: 8px; transition: background 0.5s ease, box-shadow 0.5s ease; }
   .story-para.reading { background: rgba(232,160,69,0.14); box-shadow: 0 0 0 7px rgba(232,160,69,0.14); }
+  .story-extras { background: #fbf6ea; border: 1px solid rgba(232,160,69,0.3); border-radius: 12px; padding: 16px 18px; margin: -8px 0 26px; font-size: 0.9rem; line-height: 1.75; white-space: pre-wrap; color: #3a3228; }
+  .premium-row { display: flex; align-items: center; gap: 9px; margin-top: 16px; font-size: 0.85rem; cursor: pointer; opacity: 0.9; }
+  .premium-row input { accent-color: var(--gold); width: 16px; height: 16px; cursor: pointer; }
   .audio-player { background: #fffdf7; border: 1px solid rgba(232,160,69,0.25); border-radius: 14px; padding: 14px 18px; color: var(--ink); box-shadow: 0 1px 8px rgba(26,26,46,0.07); margin-bottom: 20px; }
   .player-voice { display: none; }
   .audio-status { font-size: 0.75rem; color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; animation: pulse 1.5s ease-in-out infinite; }
@@ -284,6 +287,10 @@
         <div class="slider-labels"><span>2 min</span><span>5 min</span><span>10 min</span><span>15 min</span></div>
         <input type="range" id="lengthSlider" min="2" max="15" value="5">
       </div>
+      <label class="premium-row">
+        <input type="checkbox" id="premiumToggle" onchange="savePremiumPref()">
+        <span>✨ Extra-special story — our finest storytelling, takes a little longer</span>
+      </label>
     </div>
 
     <button class="generate-btn" id="generateBtn" style="display:none" onclick="generateStory()">🌙 Create My Story</button>
@@ -339,6 +346,7 @@
       <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Speed changes are instant; changing voice regenerates audio.</p>
     </div>
     <div class="story-text" id="storyText"></div>
+    <div class="story-extras" id="storyExtras" style="display:none"></div>
     <div class="story-actions">
       <button class="save-btn" id="saveBtn" onclick="saveStory()">🌟 Save Story</button>
       <button class="new-story-btn-small" id="newStoryBtn" onclick="newStory()">🌙 New Story</button>
@@ -358,6 +366,7 @@
   var speechRate    = 0.95;   // user speed preference (applied via playbackRate)
   var narrationBaseRate = 0.95; // rate the current audio was synthesized at
   var fullStoryText = '';
+  var storyExtrasText = ''; // learner glossary/questions (fr/zh), shown but never narrated
   var narrationTimings = null; // [{para, start, end}] for read-along highlighting
   var currentAudio  = null;
   var pendingNarrationVoice = null;
@@ -406,12 +415,12 @@
     },
     fr: {
       name: 'French', defaultVoice: 'fr-FR-Studio-A', defaultRate: 0.78,
-      promptInstruction: 'Write the entire story in French (fr-FR). All text including the title must be in French. IMPORTANT: This is for non-native French learners. Use simplified clear grammar: short sentences of max 12 words, common A2-B1 level vocabulary, avoid subjunctive, avoid complex tenses beyond passe compose and imparfait, avoid idiomatic expressions. Write so a learner can understand every sentence when read aloud slowly.',
+      promptInstruction: 'Write the entire story in French (fr-FR). All text including the title must be in French. IMPORTANT: This is for non-native French learners. Use simplified clear grammar: short sentences of max 12 words, common A2-B1 level vocabulary, avoid subjunctive, avoid complex tenses beyond passe compose and imparfait, avoid idiomatic expressions. Write so a learner can understand every sentence when read aloud slowly. After the closing </story> tag, add an <extras> tag containing: the heading "Nouveaux mots :" followed by 4 useful words from the story, each on its own line as "word — simple English meaning", then the heading "Questions :" followed by 2 very simple comprehension questions in French, each on its own line.',
       narratorNote: 'Use commas for natural pauses, em-dashes for dramatic pauses. End every sentence clearly. New paragraph for each scene shift.'
     },
     zh: {
       name: 'Mandarin Chinese', defaultVoice: 'cmn-CN-Wavenet-A', defaultRate: 0.78,
-      promptInstruction: 'Write the entire story in Mandarin Chinese using Simplified Chinese characters. All text including the title must be in Chinese. IMPORTANT: This is for non-native Mandarin learners. Use simplified clear language: short sentences of max 8 characters per clause, use only common HSK 1-3 vocabulary, avoid chengyu idioms, use simple subject-verb-object structure, no complex grammar patterns. Write so a learner can understand every sentence when read aloud slowly.',
+      promptInstruction: 'Write the entire story in Mandarin Chinese using Simplified Chinese characters. All text including the title must be in Chinese. IMPORTANT: This is for non-native Mandarin learners. Use simplified clear language: short sentences of max 8 characters per clause, use only common HSK 1-3 vocabulary, avoid chengyu idioms, use simple subject-verb-object structure, no complex grammar patterns. Write so a learner can understand every sentence when read aloud slowly. After the closing </story> tag, add an <extras> tag containing: the heading "生词：" followed by 4 useful words from the story, each on its own line as "word (pinyin) — simple English meaning", then the heading "问题：" followed by 2 very simple comprehension questions in Chinese, each on its own line.',
       narratorNote: 'Use Chinese commas for natural pauses. End every sentence with a Chinese period, exclamation or question mark. Start a new paragraph for each new moment or scene shift.'
     }
   };
@@ -897,6 +906,65 @@
     });
   }
 
+  // ── RECENT STORY MEMORY (anti-repetition) ─────────────────────────────────
+  // Remembers the last dozen titles and protagonist names so new stories
+  // don't recycle them - repetition is the thing kids notice fastest.
+  var RECENT_KEY = 'mrStevens_recent';
+
+  function loadRecent() {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); }
+    catch(e) { return []; }
+  }
+
+  function extractCharacterNames(text) {
+    var SKIP = {};
+    ('The A An And But Or She He They It Its Then When His Her Their That This These Those What Now One Once As At In On So If For From With You We Was Were Had Have Who Why How Where There Here Yes No Not All By Every Inside Outside Suddenly Finally Perhaps Maybe Even Just Still Some Oh To Of Up Down Out Over Under Before After Because While Though Although Beyond Behind Above Below Never Always Soon Tonight Today Tomorrow Yesterday Mister Missus Miss Doctor Mr Mrs Ms Dr End Chapter').split(' ')
+      .forEach(function(w) { SKIP[w] = 1; });
+    var counts = {};
+    (text.match(/\b[A-Z][a-z]{2,}\b/g) || []).forEach(function(w) {
+      if (!SKIP[w]) counts[w] = (counts[w] || 0) + 1;
+    });
+    return Object.keys(counts)
+      .filter(function(w) { return counts[w] >= 3; })
+      .sort(function(a, b) { return counts[b] - counts[a]; })
+      .slice(0, 3);
+  }
+
+  function recordRecentStory(title, text) {
+    var recent = loadRecent();
+    recent.unshift({ title: title || '', names: extractCharacterNames(text || '') });
+    if (recent.length > 12) recent.length = 12;
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch(e) { /* best-effort */ }
+  }
+
+  function getAvoidClause() {
+    var recent = loadRecent();
+    if (!recent.length) return '';
+    var titles = [], names = [];
+    recent.forEach(function(r) {
+      if (r.title) titles.push(r.title);
+      (r.names || []).forEach(function(n) { if (names.indexOf(n) === -1) names.push(n); });
+    });
+    var parts = [];
+    if (titles.length) parts.push('Recent titles (avoid similar titles AND similar central ideas): ' + titles.slice(0, 10).join('; '));
+    if (names.length)  parts.push('Recently used character names (choose different ones): ' + names.slice(0, 15).join(', '));
+    return parts.length ? '\n- FRESHNESS: This child has heard these stories before. ' + parts.join('. ') + '.' : '';
+  }
+
+  // ── PREMIUM STORY TOGGLE ──────────────────────────────────────────────────
+  var PREMIUM_KEY = 'mrStevens_premium';
+  function isPremiumStory() {
+    var t = document.getElementById('premiumToggle');
+    return !!(t && t.checked);
+  }
+  function savePremiumPref() {
+    try { localStorage.setItem(PREMIUM_KEY, isPremiumStory() ? '1' : '0'); } catch(e) {}
+  }
+  function restorePremiumPref() {
+    var t = document.getElementById('premiumToggle');
+    try { if (t && localStorage.getItem(PREMIUM_KEY) === '1') t.checked = true; } catch(e) {}
+  }
+
   // ── GENERATE STORY ────────────────────────────────────────────────────────
   function generateStory() {
     var theme   = document.getElementById('themeInput').value.trim();
@@ -934,13 +1002,14 @@
       + '- Do not include word count or meta-commentary\n'
       + '- CHARACTER NAMES: Be creative and varied. NEVER use the names Marcus, Maya, or Ms. Chen. Choose fresh, distinctive names suited to the story world.\n'
       + '- STORY TITLE: Be inventive. NEVER start with "The Weight of". Avoid heavy abstract nouns as title openers. Titles can be playful, concrete, intriguing, or surprising.\n'
-      + '- NARRATION: ' + cfg.narratorNote;
+      + '- NARRATION: ' + cfg.narratorNote
+      + getAvoidClause();
 
     fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: isPremiumStory() ? 'claude-sonnet-5' : 'claude-haiku-4-5-20251001',
         max_tokens: 4096,
         stream: true,
         messages: [{ role: 'user', content: prompt }]
@@ -966,6 +1035,7 @@
         document.getElementById('storyTitle').textContent   = '…';
         document.getElementById('storyText').textContent    = '';
         document.getElementById('storyMeta').innerHTML      = '';
+        renderStoryExtras('');
         document.getElementById('nowReading').textContent   = 'Audio will be ready when story finishes...';
         document.getElementById('progressFill').style.width = '0%';
         document.getElementById('playBtn').textContent      = '▶';
@@ -1047,6 +1117,18 @@
     });
   }
 
+  function renderStoryExtras(extras) {
+    var el = document.getElementById('storyExtras');
+    if (!el) return;
+    if (extras && extras.trim()) {
+      el.textContent = extras.trim();
+      el.style.display = 'block';
+    } else {
+      el.textContent = '';
+      el.style.display = 'none';
+    }
+  }
+
   function updateReadingHighlight(t) {
     var paras = document.querySelectorAll('#storyText .story-para');
     if (!paras.length) return;
@@ -1091,6 +1173,11 @@
       storyTitle = tm[1].trim();
       document.getElementById('storyTitle').textContent = storyTitle;
     }
+    // Learner extras (French/Mandarin glossary + questions) - displayed under
+    // the story but excluded from narration, which only reads <story> content
+    var xm = rawText.match(/<extras>([\s\S]*?)<\/extras>/);
+    storyExtrasText = xm ? xm[1].trim() : '';
+
     var storyText = '';
     var sm = rawText.match(/<story>([\s\S]*?)<\/story>/);
     if (sm) {
@@ -1099,7 +1186,7 @@
       // Partial <story> tag (truncated stream) or old-format fallback
       var sTagIdx = rawText.indexOf('<story>');
       if (sTagIdx !== -1) {
-        storyText = rawText.slice(sTagIdx + 7).trim();
+        storyText = rawText.slice(sTagIdx + 7).replace(/<extras>[\s\S]*$/, '').trim();
       } else {
         var legacyIdx = rawText.indexOf('STORY:');
         storyText = legacyIdx !== -1 ? rawText.slice(legacyIdx + 6).replace(/^\s*\n/, '').trim() : rawText.trim();
@@ -1111,7 +1198,9 @@
   function finishStory(storyTitle, storyText, voice, cfg, minutes) {
     fullStoryText = storyText.trim();
     if (!fullStoryText) { showError('No story content received. Please try again.'); return; }
+    recordRecentStory(storyTitle, fullStoryText);
     renderStoryText(fullStoryText);
+    renderStoryExtras(storyExtrasText);
     document.getElementById('storyMeta').innerHTML =
       '<span class="meta-tag">Age ' + selectedAge + '</span>' +
       '<span class="meta-tag">' + minutes + ' min</span>' +
@@ -1982,6 +2071,8 @@
     document.getElementById('storyCard').classList.remove('visible');
     document.getElementById('setupSection').style.display = 'block';
     selectedAge = null; selectedStyle = null; fullStoryText = '';
+    storyExtrasText = ''; narrationTimings = null;
+    renderStoryExtras('');
     // Reset save button
     var saveBtn = document.getElementById('saveBtn');
     if (saveBtn) { saveBtn.textContent = '🌟 Save Story'; saveBtn.classList.remove('saved'); saveBtn.disabled = false; }
@@ -2019,6 +2110,7 @@
     updateSliderGradient();
     populateVoiceDropdowns();
     updateSpeedSlider(0.95);
+    restorePremiumPref();
   }
 
   if (document.readyState === 'loading') {
@@ -2094,6 +2186,7 @@
       title:    title,
       text:     text,
       synopsis: getSynopsis(text),
+      extras:   storyExtrasText || '',
       lang:     selectedLang,
       age:      selectedAge,
       style:    selectedStyle,
@@ -2172,6 +2265,8 @@
     document.getElementById('storyTitle').textContent = story.title;
     renderStoryText(story.text);
     fullStoryText = story.text;
+    storyExtrasText = story.extras || '';
+    renderStoryExtras(storyExtrasText);
     document.getElementById('storyMeta').innerHTML =
       (story.age   ? '<span class="meta-tag">Age ' + story.age + '</span>' : '') +
       (story.style ? '<span class="meta-tag">Style of ' + story.style.author + '</span>' : '') +
