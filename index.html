@@ -334,7 +334,7 @@
           <span class="speed-value-label" id="speedValueLabel">Normal</span>
         </div>
       </div>
-      <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Changing voice or speed regenerates audio.</p>
+      <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Speed changes are instant; changing voice regenerates audio.</p>
     </div>
     <div class="story-text" id="storyText"></div>
     <div class="story-actions">
@@ -353,7 +353,8 @@
   var selectedAge   = null;
   var selectedStyle = null;
   var selectedLang  = 'en';
-  var speechRate    = 0.95;
+  var speechRate    = 0.95;   // user speed preference (applied via playbackRate)
+  var narrationBaseRate = 0.95; // rate the current audio was synthesized at
   var fullStoryText = '';
   var currentAudio  = null;
   var pendingNarrationVoice = null;
@@ -737,6 +738,22 @@
     speechRate = parseFloat(val);
     var lbl = document.getElementById('speedValueLabel');
     if (lbl) lbl.textContent = speedLabel(val);
+    applyPlaybackSpeed();
+  }
+
+  // Speed changes are free and instant: audio is synthesized once at the
+  // language's base rate and the user's speed is applied as playbackRate
+  // with pitch preservation - no re-synthesis, no extra TTS cost.
+  function applyPlaybackSpeed() {
+    if (!currentAudio) return;
+    var rate = speechRate / (narrationBaseRate || 0.95);
+    if (rate < 0.5) rate = 0.5;
+    if (rate > 2)   rate = 2;
+    try {
+      currentAudio.preservesPitch = true;
+      currentAudio.webkitPreservesPitch = true;
+      currentAudio.playbackRate = rate;
+    } catch (e) { /* older browsers: rate change still works, pitch may shift */ }
   }
 
   // ── AGE SELECTION ─────────────────────────────────────────────────────────
@@ -1075,6 +1092,9 @@
     var voice      = pendingNarrationVoice;
     var storyTitle = pendingNarrationTitle;
     var text       = fullStoryText;
+    // Synthesize at the language's default rate; the user's speed preference
+    // is applied afterwards as playbackRate (free, instant, cache-friendly)
+    narrationBaseRate = (LANG_CONFIG[selectedLang] || LANG_CONFIG.en).defaultRate;
 
     var lnr     = document.getElementById('loadNarrationRow');
     var pc      = document.getElementById('playerControls');
@@ -1538,12 +1558,13 @@
     if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
 
     // ── Audio config ────────────────────────────────────────────────────────
-    // Multipliers sit ~4-5% below their previous values for a slightly more
-    // deliberate storyteller pace across every engine.
-    var effectiveSpeechRate = isJourney ? speechRate * 0.78
-                            : isStudio   ? speechRate * 0.86
-                            : isChinese  ? speechRate * 1.02
-                            : speechRate * 0.96;
+    // Multipliers sit ~4-5% below their pre-tuning values for a slightly more
+    // deliberate storyteller pace. Synthesis always uses narrationBaseRate
+    // (the language default); the user's speed slider is applied at playback.
+    var effectiveSpeechRate = isJourney ? narrationBaseRate * 0.78
+                            : isStudio   ? narrationBaseRate * 0.86
+                            : isChinese  ? narrationBaseRate * 1.02
+                            : narrationBaseRate * 0.96;
 
     var audioConfig = {
       audioEncoding: 'MP3',
@@ -1709,6 +1730,7 @@
   function setupAudioPlayer(url) {
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     currentAudio = new Audio(url);
+    applyPlaybackSpeed();
     currentAudio.addEventListener('timeupdate', function() {
       if (!currentAudio.duration) return;
       document.getElementById('progressFill').style.width = (currentAudio.currentTime / currentAudio.duration * 100) + '%';
@@ -1837,12 +1859,8 @@
     }
     var speedSlider = document.getElementById('speedSlider');
     if (speedSlider) {
+      // Speed applies live via playbackRate - no regeneration needed
       speedSlider.addEventListener('input', function() { updateSpeedSlider(speedSlider.value); });
-      speedSlider.addEventListener('change', function() {
-        if (!fullStoryText) return;
-        if (currentAudio) currentAudio.pause();
-        loadNarration();
-      });
     }
     var liveVoice = document.getElementById('liveVoiceSelect');
     if (liveVoice) liveVoice.addEventListener('change', changeVoiceLive);
