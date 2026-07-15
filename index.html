@@ -90,6 +90,8 @@
   .story-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .meta-tag { padding: 4px 12px; background: white; border-radius: 50px; font-size: 0.75rem; font-weight: 700; color: #888; border: 1.5px solid #e8e0d0; }
   .story-text { font-family: 'Playfair Display',serif; font-size: 1.05rem; line-height: 1.9; color: #3a3228; margin-bottom: 32px; white-space: pre-wrap; }
+  .story-para { margin: 0 0 1.15em; white-space: pre-wrap; border-radius: 8px; transition: background 0.5s ease, box-shadow 0.5s ease; }
+  .story-para.reading { background: rgba(232,160,69,0.14); box-shadow: 0 0 0 7px rgba(232,160,69,0.14); }
   .audio-player { background: #fffdf7; border: 1px solid rgba(232,160,69,0.25); border-radius: 14px; padding: 14px 18px; color: var(--ink); box-shadow: 0 1px 8px rgba(26,26,46,0.07); margin-bottom: 20px; }
   .player-voice { display: none; }
   .audio-status { font-size: 0.75rem; color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; animation: pulse 1.5s ease-in-out infinite; }
@@ -356,6 +358,7 @@
   var speechRate    = 0.95;   // user speed preference (applied via playbackRate)
   var narrationBaseRate = 0.95; // rate the current audio was synthesized at
   var fullStoryText = '';
+  var narrationTimings = null; // [{para, start, end}] for read-along highlighting
   var currentAudio  = null;
   var pendingNarrationVoice = null;
   var pendingNarrationTitle = '';
@@ -1021,6 +1024,46 @@
     });
   }
 
+  // Narration hint tags the model may emit ([deep]/[high] before quotes,
+  // [tense]/[calm]/[happy]/[action] at paragraph starts). They steer the TTS
+  // but must never be shown to the reader.
+  function stripNarrationTags(s) {
+    return String(s).replace(/\[(?:deep|high|tense|calm|happy|action)\]\s*/gi, '');
+  }
+
+  // Render the story as one <p> per paragraph so the narrator's current
+  // paragraph can be highlighted during playback. Split must mirror the
+  // narration's paragraph split so data-para indices line up with timings.
+  function renderStoryText(text) {
+    var container = document.getElementById('storyText');
+    container.innerHTML = '';
+    String(text).trim().split(/\n\s*\n/).forEach(function(p, i) {
+      if (!p.trim()) return;
+      var el = document.createElement('p');
+      el.className = 'story-para';
+      el.dataset.para = i;
+      el.textContent = stripNarrationTags(p.trim());
+      container.appendChild(el);
+    });
+  }
+
+  function updateReadingHighlight(t) {
+    var paras = document.querySelectorAll('#storyText .story-para');
+    if (!paras.length) return;
+    var active = -1;
+    if (narrationTimings && t >= 0) {
+      for (var i = 0; i < narrationTimings.length; i++) {
+        if (t >= narrationTimings[i].start && t < narrationTimings[i].end) {
+          active = narrationTimings[i].para;
+          break;
+        }
+      }
+    }
+    for (var j = 0; j < paras.length; j++) {
+      paras[j].classList.toggle('reading', parseInt(paras[j].dataset.para, 10) === active);
+    }
+  }
+
   function updateStoryDisplay(rawText) {
     // Title: complete tag or partial (streaming)
     var tm = rawText.match(/<title>([\s\S]*?)<\/title>/);
@@ -1037,7 +1080,7 @@
     var sStart = rawText.indexOf('<story>');
     if (sStart !== -1) {
       var partial = rawText.slice(sStart + 7).replace(/<\/story>[\s\S]*$/, '').trim();
-      document.getElementById('storyText').textContent = partial;
+      document.getElementById('storyText').textContent = stripNarrationTags(partial);
     }
   }
 
@@ -1068,7 +1111,7 @@
   function finishStory(storyTitle, storyText, voice, cfg, minutes) {
     fullStoryText = storyText.trim();
     if (!fullStoryText) { showError('No story content received. Please try again.'); return; }
-    document.getElementById('storyText').textContent = fullStoryText;
+    renderStoryText(fullStoryText);
     document.getElementById('storyMeta').innerHTML =
       '<span class="meta-tag">Age ' + selectedAge + '</span>' +
       '<span class="meta-tag">' + minutes + ' min</span>' +
@@ -1116,6 +1159,7 @@
       if (hit && hit.blob) {
         // Cache hit: no synthesis, no cost, instant playback
         narrationAbortController = null;
+        narrationTimings = hit.timings || null;
         setupAudioPlayer(URL.createObjectURL(hit.blob));
         if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
         document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
@@ -1125,6 +1169,7 @@
       return generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal)
       .then(function(result) {
         narrationAbortController = null;
+        narrationTimings = result.timings || null;
         setupAudioPlayer(result.url);
         if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
         if (result.warnings > 0) {
@@ -1536,6 +1581,7 @@
 
     // ── Split into merged chunks ────────────────────────────────────────────
     var chunks = [];
+    var paraCount = 0; // narration paragraphs, for finale para indexing
 
     if (storyTitle) {
       chunks.push(titleChunk(storyTitle));
@@ -1570,37 +1616,27 @@
       // Journey ignores SSML, and merged paragraphs used to run together when
       // the in-text dot trick failed - and got NO pause at all whenever a
       // paragraph boundary fell on a chunk boundary.
-      var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
+      var paras = text.split(/\n\s*\n/).filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
+      paraCount = paras.length;
       paras.forEach(function(p, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: 1300 });
-        chunks.push(buildJourneyChunk(p.trim()));
+        var c = buildJourneyChunk(p.trim());
+        c.para = i; // paragraph index, for read-along highlighting timings
+        chunks.push(c);
       });
     } else {
-      var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
+      // One request per paragraph here too: chunk boundaries always fall on
+      // paragraph boundaries, pauses are stitched silence, and each chunk maps
+      // 1:1 to a display paragraph for read-along highlighting.
+      var paras = text.split(/\n\s*\n/).filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
-      var paraLensS = paras.map(function(p){ return paragraphInnerSsml(p.trim()).length; });
-      var totalLenS = paraLensS.reduce(function(a, b){ return a + b; }, 0);
-      var sHardMax = 3500, sTarget = 2000;
-      var sNumChunks = Math.max(1, Math.ceil(totalLenS / sTarget));
-      var sTargetPer = Math.ceil(totalLenS / sNumChunks);
-      var groups = [];
-      var group = [], groupLen = 0;
+      paraCount = paras.length;
       paras.forEach(function(p, i) {
-        var plen = paraLensS[i];
-        if (group.length > 0 && (groupLen + plen > sHardMax || groupLen >= sTargetPer)) {
-          groups.push(group);
-          group = []; groupLen = 0;
-        }
-        group.push(p.trim());
-        groupLen += plen;
-      });
-      if (group.length > 0) groups.push(group);
-      // Stitch the same paragraph gap at chunk boundaries as inside chunks,
-      // so pacing stays even wherever the split happens to fall.
-      groups.forEach(function(g, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: PARAGRAPH_GAP_MS });
-        chunks.push(buildSsmlChunk(g));
+        var c = buildSsmlChunk([p.trim()]);
+        c.para = i;
+        chunks.push(c);
       });
     }
 
@@ -1608,16 +1644,19 @@
     // Finality contour: "The" lifts slightly (suspended, expectant), then
     // "End." falls and settles. The lead-in pause is stitched silence for all
     // engines rather than an in-SSML break.
+    // The finale maps to display paragraph index paraCount: if the story text
+    // ends with its own "The End" line (stripped from narration), that display
+    // paragraph sits right after the narrated ones and highlights here.
     if (isJourney) {
       chunks.push({ type: 'silence', durationMs: 2200 });
       // The ellipsis suspends "The" on a hanging (raised) tone; the full stop
       // gives "End." Journey's natural downward, settled close.
-      chunks.push({ type: 'text', value: 'The...  End.' });
+      chunks.push({ type: 'text', value: 'The...  End.', para: paraCount });
     } else if (isStudio) {
       // Studio ignores the pitch attribute, so lean on emphasis + the pause +
       // sentence-final period for the rise/fall shape.
       chunks.push({ type: 'silence', durationMs: 2200 });
-      chunks.push({ type: 'ssml', value: '<speak>'
+      chunks.push({ type: 'ssml', para: paraCount, value: '<speak>'
         + '<prosody rate="55%" volume="-2dB">'
         + '<emphasis level="moderate">The</emphasis><break time="500ms"/> End.'
         + '</prosody>'
@@ -1626,7 +1665,7 @@
     } else {
       chunks.push({ type: 'silence', durationMs: 2200 });
       var endFall = isChinese ? '-2st' : '-4st';
-      chunks.push({ type: 'ssml', value: '<speak>'
+      chunks.push({ type: 'ssml', para: paraCount, value: '<speak>'
         + '<prosody rate="55%" volume="-2dB">'
         + '<prosody pitch="+1st">The</prosody><break time="500ms"/> <prosody pitch="' + endFall + '">End.</prosody>'
         + '</prosody>'
@@ -1745,8 +1784,19 @@
       // ~8ms fade at each buffer edge: butt-joining decoded chunks can cut a
       // waveform mid-cycle, which is audible as a click at every stitch point
       var fadeN = Math.round(ctxRate * 0.008);
+      // Paragraph timings for read-along highlighting: chunks carry their
+      // paragraph index, and we know each buffer's exact position in the mix
+      var timings = [];
       var offset = 0;
-      buffers.forEach(function(buf) {
+      buffers.forEach(function(buf, bi) {
+        var chunk = chunks[bi];
+        if (chunk && typeof chunk.para === 'number' && chunk.para >= 0) {
+          var startS = offset / ctxRate;
+          var endS   = (offset + buf.length) / ctxRate;
+          var lastT  = timings[timings.length - 1];
+          if (lastT && lastT.para === chunk.para) lastT.end = endS;
+          else timings.push({ para: chunk.para, start: startS, end: endS });
+        }
         var n = Math.min(fadeN, Math.floor(buf.length / 4));
         for (var ch = 0; ch < numChannels; ch++) {
           if (ch < buf.numberOfChannels) {
@@ -1764,7 +1814,7 @@
       });
       var wavBlob = audioBufferToWav(combined);
       audioCtx.close();
-      return { url: URL.createObjectURL(wavBlob), blob: wavBlob, warnings: chunkWarnings };
+      return { url: URL.createObjectURL(wavBlob), blob: wavBlob, warnings: chunkWarnings, timings: timings.length ? timings : null };
     }).catch(function(err) {
       audioCtx.close();
       throw err;
@@ -1826,6 +1876,7 @@
       if (!currentAudio.duration) return;
       document.getElementById('progressFill').style.width = (currentAudio.currentTime / currentAudio.duration * 100) + '%';
       document.getElementById('currentTime').textContent  = formatTime(currentAudio.currentTime);
+      updateReadingHighlight(currentAudio.currentTime);
     });
     currentAudio.addEventListener('loadedmetadata', function() {
       document.getElementById('totalTime').textContent = formatTime(currentAudio.duration);
@@ -1834,6 +1885,7 @@
       document.getElementById('playBtn').textContent    = '\u25b6';
       document.getElementById('nowReading').textContent = 'Story complete';
       document.getElementById('progressFill').style.width = '100%';
+      updateReadingHighlight(-1);
     });
   }
   function togglePlay() {
@@ -1854,6 +1906,7 @@
     document.getElementById('progressFill').style.width = '0%';
     document.getElementById('currentTime').textContent  = '0:00';
     document.getElementById('nowReading').textContent   = 'Press play to begin narration';
+    updateReadingHighlight(-1);
   }
   function previewVoice() {
     var btn = document.getElementById('previewVoiceBtn');
@@ -2031,7 +2084,9 @@
     var btn = document.getElementById('saveBtn');
     if (btn.classList.contains('saved')) return;
     var title = document.getElementById('storyTitle').textContent;
-    var text  = document.getElementById('storyText').textContent;
+    // Save the raw story text (with paragraph breaks and narration tags), not
+    // the rendered DOM text - <p> textContent would collapse paragraphs
+    var text  = fullStoryText;
     if (!title || !text) return;
     var lib = loadLibrary();
     var entry = {
@@ -2115,7 +2170,7 @@
 
     // Populate story card
     document.getElementById('storyTitle').textContent = story.title;
-    document.getElementById('storyText').textContent  = story.text;
+    renderStoryText(story.text);
     fullStoryText = story.text;
     document.getElementById('storyMeta').innerHTML =
       (story.age   ? '<span class="meta-tag">Age ' + story.age + '</span>' : '') +
