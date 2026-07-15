@@ -1730,7 +1730,9 @@
           if (err.name === 'AbortError') throw err;
           chunkWarnings++;
           addPhase(ti, 1.0 - progressWeights[ti]); // mark complete even on failure
-          var n = Math.round(audioCtx.sampleRate * 5); // ~5 s silence at correct sample rate
+          // Short gap instead of the old mysterious 5s of dead air; the player
+          // surfaces the failure and offers a retry
+          var n = Math.round(audioCtx.sampleRate * 1.2);
           return audioCtx.createBuffer(1, n, audioCtx.sampleRate);
         });
     });
@@ -1740,11 +1742,21 @@
       var numChannels = buffers.reduce(function(max, b){ return Math.max(max, b.numberOfChannels); }, 1);
       var totalLength = buffers.reduce(function(sum,  b){ return sum + b.length; }, 0);
       var combined    = audioCtx.createBuffer(numChannels, totalLength, ctxRate);
+      // ~8ms fade at each buffer edge: butt-joining decoded chunks can cut a
+      // waveform mid-cycle, which is audible as a click at every stitch point
+      var fadeN = Math.round(ctxRate * 0.008);
       var offset = 0;
       buffers.forEach(function(buf) {
+        var n = Math.min(fadeN, Math.floor(buf.length / 4));
         for (var ch = 0; ch < numChannels; ch++) {
           if (ch < buf.numberOfChannels) {
-            combined.getChannelData(ch).set(buf.getChannelData(ch), offset);
+            var data = buf.getChannelData(ch);
+            for (var f = 0; f < n; f++) {
+              var g = f / n;
+              data[f] *= g;                        // fade in
+              data[buf.length - 1 - f] *= g;       // fade out
+            }
+            combined.getChannelData(ch).set(data, offset);
           }
           // channels absent in this buffer stay zero (silence)
         }
