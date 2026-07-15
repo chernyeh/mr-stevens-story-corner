@@ -1133,14 +1133,24 @@
     var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
     var isStudio  = voiceId.toLowerCase().indexOf('studio') !== -1;
 
+    // Normalise straight double quotes to curly pairs so dialogue detection
+    // (which matches “…”) works on generated stories, which use straight quotes.
+    text = text.replace(/"([^"\n]{1,300})"/g, '“$1”');
+    // Strip a trailing "The End"/"Fin" line from the story body — the finale
+    // chunk below adds its own, and we don't want it narrated twice.
+    text = text.replace(/\n\s*[“”"'*_]*(?:the end|fin)[.!]?[”"'*_\s]*$/i, '');
+
     function escXml(s) {
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
     }
 
-    // Title - read with grandeur; 2-second pause before story begins
+    // Title - read with grandeur. The pause AFTER the title is stitched in as a
+    // real silence chunk (trailing <break> tags before </speak> are unreliable -
+    // Google often trims them, which made the opening feel rushed).
     function titleChunk(title) {
       if (isJourney) {
-        return { type: 'text', value: title + '..........' };
+        // A full stop gives Journey a natural, settled downward close on the title.
+        return { type: 'text', value: title.replace(/[.!?]?\s*$/, '.') };
       }
       var t = escXml(title);
       if (isStudio) {
@@ -1149,7 +1159,6 @@
           + '<prosody rate="72%" volume="+1dB">'
           + '<emphasis level="strong">' + t + '</emphasis>'
           + '</prosody>'
-          + '<break time="2000ms"/>'
           + '</speak>' };
       }
       return { type: 'ssml', value: '<speak>'
@@ -1157,7 +1166,6 @@
         + '<prosody rate="72%" pitch="-1.5st" volume="+1dB">'
         + '<emphasis level="strong">' + t + '</emphasis>'
         + '</prosody>'
-        + '<break time="2000ms"/>'
         + '</speak>' };
     }
 
@@ -1181,6 +1189,12 @@
       s = s.replace(/E\.U\./g, 'E§U§');
       s = s.replace(/U\.N\./g, 'U§N§');
       s = s.replace(/\u2014/g, '<break time="500ms"/>');
+      // Sentence-final punctuation tucked inside a closing dialogue quote \u2014
+      // e.g. mountain.\u201d  or  mountain.&quot;  \u2014 the plain rules below never match
+      // these (the mark isn't followed by whitespace), which made every
+      // dialogue-final sentence run straight into the next one.
+      s = s.replace(/([.!?])(\u201d(?:<\/prosody>)?|&quot;)\s+/g, '$1$2<break time="600ms"/> ');
+      s = s.replace(/([,;])(\u201d(?:<\/prosody>)?|&quot;)\s+/g, '$1$2<break time="250ms"/> ');
       // Full stop - definitive pause (Google applies natural downward inflection)
       s = s.replace(/\.\s+/g, '.<break time="600ms"/> ');
       // Question mark - pitch-up prosody on the mark itself for genuine curiosity
@@ -1248,9 +1262,9 @@
       });
       // Step 2: slow the attribution verb after the closing quote
       // Pattern A: </prosody>[space/punct] said/asked/etc — e.g. "Hello," said Tom
-      var attrA = /(\/prosody>)([\s,!?.]*)(said|asked|whispered|shouted|replied|called|murmured|cried|exclaimed|answered|announced|added|continued|explained|insisted|laughed|muttered|pleaded|promised|suggested|warned|wondered)(\s)/g;
+      var attrA = /(\/prosody>)([\s,!?.]*)(said|asked|whispered|shouted|replied|called|murmured|cried|exclaimed|answered|announced|added|continued|explained|insisted|laughed|muttered|pleaded|promised|suggested|warned|wondered|rumbled|growled|squeaked|boomed|bellowed|hissed|roared|croaked|chirped|sighed)(\s)/g;
       // Pattern B: </prosody>[space/punct] Name verb — e.g. "Hello?" Tom said
-      var attrB = /(\/prosody>)([\s,!?.]*)([A-Z][a-z]+\s)(said|asked|whispered|shouted|replied|called|murmured|cried|exclaimed|answered|announced|added|continued|explained|insisted|laughed|muttered|pleaded|promised|suggested|warned|wondered)(\s)/g;
+      var attrB = /(\/prosody>)([\s,!?.]*)([A-Z][a-z]+\s)(said|asked|whispered|shouted|replied|called|murmured|cried|exclaimed|answered|announced|added|continued|explained|insisted|laughed|muttered|pleaded|promised|suggested|warned|wondered|rumbled|growled|squeaked|boomed|bellowed|hissed|roared|croaked|chirped|sighed)(\s)/g;
       if (isStudio) {
         s = s.replace(attrA, '$1<break time="150ms"/>$2<prosody rate="82%">$3</prosody>$4');
         s = s.replace(attrB, '$1<break time="150ms"/>$2$3<prosody rate="82%">$4</prosody>$5');
@@ -1325,8 +1339,15 @@
       return addBreaks(raw);
     }
 
+    // Paragraph gap, used both as an in-chunk <break> and as stitched silence at
+    // chunk boundaries so every paragraph pause is the same length regardless of
+    // where the chunk split happens to fall.
+    var PARAGRAPH_GAP_MS = 1500;
+
     // Builds one merged SSML chunk from a group of paragraphs
-    // Each paragraph gets its own mood-adjusted prosody wrapper (1800ms paragraph breaks)
+    // Each paragraph gets its own mood-adjusted prosody wrapper. No trailing
+    // break: Google trims trailing silence, so the boundary pause is stitched
+    // in as a real silence chunk instead.
     function buildSsmlChunk(paraGroup) {
       var parts = paraGroup.map(function(para) {
         var mood  = detectParagraphMood(para);
@@ -1337,8 +1358,7 @@
         return '<prosody rate="' + mood.rate + '" pitch="' + mood.pitch + '">' + inner + '</prosody>';
       });
       return { type: 'ssml', value: '<speak>'
-        + parts.join('<break time="3600ms"/>')
-        + '<break time="900ms"/>'
+        + parts.join('<break time="' + PARAGRAPH_GAP_MS + 'ms"/>')
         + '</speak>' };
     }
 
@@ -1362,13 +1382,22 @@
       s = s.replace(/U\.K\./g, 'U§K§');
       s = s.replace(/E\.U\./g, 'E§U§');
       s = s.replace(/U\.N\./g, 'U§N§');
-      s = s.replace(/\.\s+/g,    '......   ');
-      s = s.replace(/\?\s+/g,    '?..   ');
-      s = s.replace(/!\s+/g,     '!..   ');
-      s = s.replace(/,\s+/g,     ',  ');
-      s = s.replace(/;\s+/g,     ',...  ');
-      s = s.replace(/\u2014/g,   ',....  ');
-      s = s.replace(/\.\.\.\s*/g,'......  ');
+      // Pause markers are placed in a single pass using ¶ placeholders, then
+      // expanded once at the end. The old chained dot-replacements re-processed
+      // each other's output, so a plain sentence end ballooned into a 12-dot
+      // pause while an ellipsis got 6 — and quote-final punctuation
+      // (mountain.” / mountain.") got no pause at all. Pacing came out uneven.
+      s = s.replace(/(?:\.\.\.|…)([”"’']*)/g, '¶E$1'); // ellipsis - long trailing pause
+      s = s.replace(/(?:\u2014|--)/g,             '¶D');   // em-dash - hanging pause
+      s = s.replace(/;\s+/g,                      '¶D ');  // semicolon - mid pause
+      s = s.replace(/\.([”"’']*)(?=\s)/g,      '.$1¶P'); // sentence end (quote-aware)
+      s = s.replace(/([?!])([”"’']*)(?=\s)/g,   '$1$2¶Q');
+      s = s.replace(/,\s+/g, ',  ');
+      // Expand pause markers (nothing below re-processes these)
+      s = s.replace(/¶E/g, '......  ');
+      s = s.replace(/¶D/g, ',....  ');
+      s = s.replace(/¶P/g, '.....   ');
+      s = s.replace(/¶Q/g, '..   ');
       // Restore as spoken words — no period means Google's NLP won't pause mid-name
       s = s.replace(/Mr§/g,   'Mister ');
       s = s.replace(/Mrs§/g,  'Missus ');
@@ -1383,9 +1412,11 @@
       return s;
     }
 
-    // Builds one merged Journey chunk from a group of paragraphs
-    function buildJourneyChunk(paraGroup) {
-      return { type: 'text', value: paraGroup.map(processJourneyText).join('............        ') };
+    // One Journey chunk = one paragraph. Journey can't take SSML breaks, and
+    // in-text dot runs pause inconsistently, so paragraph pauses are stitched
+    // in as real silence between per-paragraph chunks instead.
+    function buildJourneyChunk(para) {
+      return { type: 'text', value: processJourneyText(para) };
     }
 
     // Chinese paragraph SSML (character-by-character punctuation handling)
@@ -1408,9 +1439,9 @@
 
     if (storyTitle) {
       chunks.push(titleChunk(storyTitle));
-      if (isJourney) {
-        chunks.push({ type: 'silence', durationMs: 1500 });
-      }
+      // All engines get a real stitched pause after the title (the SSML voices
+      // used to rely on a trailing <break>, which Google trims).
+      chunks.push({ type: 'silence', durationMs: isJourney ? 1500 : 2000 });
     }
 
     if (isChinese) {
@@ -1421,31 +1452,30 @@
         if (c === '\u3002' || c === '\uff01' || c === '\uff1f' || c === '!' || c === '?') marked += '|';
       }
       var sentences = marked.split('|').map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
+      var zhChunks = [];
       var cur = '';
       sentences.forEach(function(s) {
-        if (cur.length + s.length > 150 && cur.length > 0) { chunks.push(chineseParagraphSsml(cur)); cur = s; }
+        if (cur.length + s.length > 150 && cur.length > 0) { zhChunks.push(chineseParagraphSsml(cur)); cur = s; }
         else cur += s;
       });
-      if (cur.length > 0) chunks.push(chineseParagraphSsml(cur));
+      if (cur.length > 0) zhChunks.push(chineseParagraphSsml(cur));
+      // Real silence between chunks - each chunk's trailing <break> gets
+      // trimmed by Google, which made chunk-boundary sentences run together.
+      zhChunks.forEach(function(c, i) {
+        if (i > 0) chunks.push({ type: 'silence', durationMs: 480 });
+        chunks.push(c);
+      });
     } else if (isJourney) {
+      // One request per paragraph, with real stitched silence between them.
+      // Journey ignores SSML, and merged paragraphs used to run together when
+      // the in-text dot trick failed - and got NO pause at all whenever a
+      // paragraph boundary fell on a chunk boundary.
       var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
-      var paraLensJ = paras.map(function(p){ return processJourneyText(p.trim()).length; });
-      var totalLenJ = paraLensJ.reduce(function(a, b){ return a + b; }, 0);
-      var jHardMax = 4500, jTarget = 2800;
-      var jNumChunks = Math.max(1, Math.ceil(totalLenJ / jTarget));
-      var jTargetPer = Math.ceil(totalLenJ / jNumChunks);
-      var group = [], groupLen = 0;
       paras.forEach(function(p, i) {
-        var plen = paraLensJ[i];
-        if (group.length > 0 && (groupLen + plen > jHardMax || groupLen >= jTargetPer)) {
-          chunks.push(buildJourneyChunk(group));
-          group = []; groupLen = 0;
-        }
-        group.push(p.trim());
-        groupLen += plen;
+        if (i > 0) chunks.push({ type: 'silence', durationMs: 1300 });
+        chunks.push(buildJourneyChunk(p.trim()));
       });
-      if (group.length > 0) chunks.push(buildJourneyChunk(group));
     } else {
       var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
@@ -1454,39 +1484,51 @@
       var sHardMax = 3500, sTarget = 2000;
       var sNumChunks = Math.max(1, Math.ceil(totalLenS / sTarget));
       var sTargetPer = Math.ceil(totalLenS / sNumChunks);
+      var groups = [];
       var group = [], groupLen = 0;
       paras.forEach(function(p, i) {
         var plen = paraLensS[i];
         if (group.length > 0 && (groupLen + plen > sHardMax || groupLen >= sTargetPer)) {
-          chunks.push(buildSsmlChunk(group));
+          groups.push(group);
           group = []; groupLen = 0;
         }
         group.push(p.trim());
         groupLen += plen;
       });
-      if (group.length > 0) chunks.push(buildSsmlChunk(group));
+      if (group.length > 0) groups.push(group);
+      // Stitch the same paragraph gap at chunk boundaries as inside chunks,
+      // so pacing stays even wherever the split happens to fall.
+      groups.forEach(function(g, i) {
+        if (i > 0) chunks.push({ type: 'silence', durationMs: PARAGRAPH_GAP_MS });
+        chunks.push(buildSsmlChunk(g));
+      });
     }
 
     // ── "The End" finale ────────────────────────────────────────────────────
+    // Finality contour: "The" lifts slightly (suspended, expectant), then
+    // "End." falls and settles. The lead-in pause is stitched silence for all
+    // engines rather than an in-SSML break.
     if (isJourney) {
-      chunks.push({ type: 'silence', durationMs: 2000 });
-      chunks.push({ type: 'text', value: '..........     The.....   End.....' });
+      chunks.push({ type: 'silence', durationMs: 2200 });
+      // The ellipsis suspends "The" on a hanging (raised) tone; the full stop
+      // gives "End." Journey's natural downward, settled close.
+      chunks.push({ type: 'text', value: 'The...  End.' });
     } else if (isStudio) {
-      chunks.push({ type: 'silence', durationMs: 800 });
+      // Studio ignores the pitch attribute, so lean on emphasis + the pause +
+      // sentence-final period for the rise/fall shape.
+      chunks.push({ type: 'silence', durationMs: 2200 });
       chunks.push({ type: 'ssml', value: '<speak>'
-        + '<break time="2000ms"/>'
         + '<prosody rate="55%" volume="-2dB">'
-        + 'The<break time="600ms"/> End.'
+        + '<emphasis level="moderate">The</emphasis><break time="500ms"/> End.'
         + '</prosody>'
         + '<break time="1500ms"/>'
         + '</speak>' });
     } else {
-      chunks.push({ type: 'silence', durationMs: 800 });
-      var theEndPitch = isChinese ? '-1st' : '-3st';
+      chunks.push({ type: 'silence', durationMs: 2200 });
+      var endFall = isChinese ? '-2st' : '-4st';
       chunks.push({ type: 'ssml', value: '<speak>'
-        + '<break time="2000ms"/>'
-        + '<prosody rate="55%" pitch="' + theEndPitch + '" volume="-2dB">'
-        + 'The<break time="600ms"/> End.'
+        + '<prosody rate="55%" volume="-2dB">'
+        + '<prosody pitch="+1st">The</prosody><break time="500ms"/> <prosody pitch="' + endFall + '">End.</prosody>'
         + '</prosody>'
         + '<break time="1500ms"/>'
         + '</speak>' });
@@ -1495,10 +1537,12 @@
     if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
 
     // ── Audio config ────────────────────────────────────────────────────────
-    var effectiveSpeechRate = isJourney ? speechRate * 0.82
-                            : isStudio   ? speechRate * 0.90
-                            : isChinese  ? speechRate * 1.05
-                            : speechRate;
+    // Multipliers sit ~4-5% below their previous values for a slightly more
+    // deliberate storyteller pace across every engine.
+    var effectiveSpeechRate = isJourney ? speechRate * 0.78
+                            : isStudio   ? speechRate * 0.86
+                            : isChinese  ? speechRate * 1.02
+                            : speechRate * 0.96;
 
     var audioConfig = {
       audioEncoding: 'MP3',
@@ -1724,7 +1768,7 @@
       voice: { languageCode: voice.lang, name: voiceId },
       audioConfig: {
         audioEncoding: 'MP3',
-        speakingRate: isJourney ? speechRate * 0.82 : isStudio ? speechRate * 0.90 : isChinese ? speechRate * 1.05 : speechRate,
+        speakingRate: isJourney ? speechRate * 0.78 : isStudio ? speechRate * 0.86 : isChinese ? speechRate * 1.02 : speechRate * 0.96,
         pitch: (isJourney || isStudio) ? 0.0 : -2.0,
         effectsProfileId: ['headphone-class-device']
       }
