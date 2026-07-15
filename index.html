@@ -95,6 +95,8 @@
   .story-extras { background: #fbf6ea; border: 1px solid rgba(232,160,69,0.3); border-radius: 12px; padding: 16px 18px; margin: -8px 0 26px; font-size: 0.9rem; line-height: 1.75; white-space: pre-wrap; color: #3a3228; }
   .premium-row { display: flex; align-items: center; gap: 9px; margin-top: 16px; font-size: 0.85rem; cursor: pointer; opacity: 0.9; }
   .premium-row input { accent-color: var(--gold); width: 16px; height: 16px; cursor: pointer; }
+  .fullcast-label { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: rgba(26,26,46,0.65); cursor: pointer; flex: 1; }
+  .fullcast-label input { accent-color: var(--gold); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
   .audio-player { background: #fffdf7; border: 1px solid rgba(232,160,69,0.25); border-radius: 14px; padding: 14px 18px; color: var(--ink); box-shadow: 0 1px 8px rgba(26,26,46,0.07); margin-bottom: 20px; }
   .player-voice { display: none; }
   .audio-status { font-size: 0.75rem; color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; animation: pulse 1.5s ease-in-out infinite; }
@@ -341,6 +343,13 @@
             <span class="speed-tick">Fast</span>
           </div>
           <span class="speed-value-label" id="speedValueLabel">Normal</span>
+        </div>
+        <div class="player-setting-row">
+          <span class="player-setting-label">🎭 Full cast</span>
+          <label class="fullcast-label" title="Giants, monsters and other deep-voiced characters are spoken by a second, deeper narrator">
+            <input type="checkbox" id="fullCastToggle" onchange="changeFullCast()">
+            <span>Deep characters get their own voice (beta)</span>
+          </label>
         </div>
       </div>
       <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Speed changes are instant; changing voice regenerates audio.</p>
@@ -1322,7 +1331,8 @@
 
   function audioCacheKey(text, voiceId, title) {
     // djb2-style double hash - cheap, synchronous, good enough for cache keys
-    var s = NARRATION_PIPELINE_V + '|' + voiceId + '|' + narrationBaseRate + '|' + title + '|' + text;
+    var s = NARRATION_PIPELINE_V + '|' + voiceId + '|' + narrationBaseRate
+      + '|cast' + (isFullCastEnabled() ? 1 : 0) + '|' + title + '|' + text;
     var h1 = 5381, h2 = 52711;
     for (var i = 0; i < s.length; i++) {
       var c = s.charCodeAt(i);
@@ -1475,6 +1485,52 @@
         if (new RegExp('\\b' + LOW_PITCH_DIALOGUE_WORDS[i] + '\\b').test(lower)) return 'low';
       }
       return 'neutral';
+    }
+
+    // ── Full-cast dialogue (beta) ───────────────────────────────────────────
+    // When enabled, quotes classified 'low' ([deep] tag or keyword scan) are
+    // synthesized with a deeper companion voice from the same engine family
+    // and stitched inline, instead of pitch-shifting the narrator.
+    var CAST_LOW_VOICES = {
+      en: { journey: { id: 'en-US-Journey-D', lang: 'en-US' },
+            neural2: { id: 'en-US-Neural2-D', lang: 'en-US' },
+            studio:  { id: 'en-US-Studio-Q',  lang: 'en-US' } },
+      fr: { journey: { id: 'fr-FR-Journey-D', lang: 'fr-FR' },
+            neural2: { id: 'fr-FR-Neural2-B', lang: 'fr-FR' },
+            studio:  { id: 'fr-FR-Studio-D',  lang: 'fr-FR' } }
+    };
+
+    function castLowVoice() {
+      var byLang = CAST_LOW_VOICES[(languageCode || 'en').slice(0, 2)];
+      var engine = isJourney ? 'journey' : isStudio ? 'studio' : 'neural2';
+      var v = byLang && byLang[engine];
+      // No cast voice if unsupported language or the narrator IS that voice
+      return (v && v.id !== voiceId) ? v : null;
+    }
+
+    // Split a paragraph into narrator / deep-voiced segments. Quotes that are
+    // not 'low' stay in the narrator segment (handled by wrapDialogue as usual).
+    function splitCastSegments(para) {
+      var segs = [];
+      var cursor = 0;
+      var re = /(?:\[(deep|low|high)\]\s*)?(“[^”]{1,300}”)/g;
+      var m;
+      while ((m = re.exec(para)) !== null) {
+        var tag = m[1] ? m[1].toLowerCase() : null;
+        var start = m.index;
+        var mood = (tag === 'deep' || tag === 'low') ? 'low'
+                 : tag === 'high' ? 'high'
+                 : classifyDialogueContext(
+                     para.slice(Math.max(0, start - DIALOGUE_CONTEXT_WINDOW), start) + ' '
+                     + para.slice(re.lastIndex, re.lastIndex + DIALOGUE_CONTEXT_WINDOW));
+        if (mood === 'low') {
+          if (start > cursor) segs.push({ text: para.slice(cursor, start), cast: false });
+          segs.push({ text: m[2], cast: true }); // the quote only; tag is dropped
+          cursor = re.lastIndex;
+        }
+      }
+      if (cursor < para.length) segs.push({ text: para.slice(cursor), cast: false });
+      return segs;
     }
 
     // Wrap dialogue quotes and speech-attribution verbs in prosody
@@ -1698,6 +1754,7 @@
     // ── Split into merged chunks ────────────────────────────────────────────
     var chunks = [];
     var paraCount = 0; // narration paragraphs, for finale para indexing
+    var castVoice = (!isChinese && isFullCastEnabled()) ? castLowVoice() : null;
 
     if (storyTitle) {
       chunks.push(titleChunk(storyTitle));
@@ -1737,9 +1794,17 @@
       paraCount = paras.length;
       paras.forEach(function(p, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: 1300 });
-        var c = buildJourneyChunk(p.trim());
-        c.para = i; // paragraph index, for read-along highlighting timings
-        chunks.push(c);
+        var segs = castVoice ? splitCastSegments(p.trim()) : [{ text: p.trim(), cast: false }];
+        segs.forEach(function(seg) {
+          if (!seg.text.trim()) return;
+          var c = buildJourneyChunk(seg.text.trim());
+          // A segment can be only tags (e.g. "[tense]" before a cast quote)
+          // and end up empty once processed - never send an empty request
+          if (!c.value.trim()) return;
+          if (seg.cast) c.voice = castVoice;
+          c.para = i; // paragraph index, for read-along highlighting timings
+          chunks.push(c);
+        });
       });
     } else {
       // One request per paragraph here too: chunk boundaries always fall on
@@ -1750,9 +1815,23 @@
       paraCount = paras.length;
       paras.forEach(function(p, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: PARAGRAPH_GAP_MS });
-        var c = buildSsmlChunk([p.trim()]);
-        c.para = i;
-        chunks.push(c);
+        var segs = castVoice ? splitCastSegments(p.trim()) : [{ text: p.trim(), cast: false }];
+        segs.forEach(function(seg) {
+          // A segment can be only tags (e.g. "[tense]" before a cast quote) -
+          // never send an empty request
+          var spoken = seg.text.replace(/\[(?:deep|high|low|tense|calm|happy|action)\]\s*/gi, '').trim();
+          if (!spoken) return;
+          var c;
+          if (seg.cast) {
+            // Real second voice: no narrator pitch-shift, just gentle pacing
+            c = { type: 'ssml', voice: castVoice,
+                  value: '<speak><prosody rate="88%">' + addBreaks(escXml(spoken)) + '</prosody></speak>' };
+          } else {
+            c = buildSsmlChunk([seg.text.trim()]);
+          }
+          c.para = i;
+          chunks.push(c);
+        });
       });
     }
 
@@ -1844,7 +1923,10 @@
     function fetchChunkWithRetry(chunk, ti, retriesLeft, delay) {
       var reqBody = {
         input: chunk.type === 'ssml' ? { ssml: chunk.value } : { text: chunk.value },
-        voice: { languageCode: languageCode, name: voiceId },
+        // Full-cast segments override the narrator with a companion voice
+        voice: chunk.voice
+          ? { languageCode: chunk.voice.lang, name: chunk.voice.id }
+          : { languageCode: languageCode, name: voiceId },
         audioConfig: audioConfig
       };
       return fetch(TTS_URL, { method: 'POST', signal: signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) })
@@ -2079,6 +2161,23 @@
     });
   }
 
+  // ── FULL-CAST DIALOGUE (beta) ─────────────────────────────────────────────
+  var FULLCAST_KEY = 'mrStevens_fullcast';
+  function isFullCastEnabled() {
+    var t = document.getElementById('fullCastToggle');
+    return !!(t && t.checked);
+  }
+  function changeFullCast() {
+    try { localStorage.setItem(FULLCAST_KEY, isFullCastEnabled() ? '1' : '0'); } catch(e) {}
+    if (!fullStoryText) return;
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    loadNarration();
+  }
+  function restoreFullCastPref() {
+    var t = document.getElementById('fullCastToggle');
+    try { if (t && localStorage.getItem(FULLCAST_KEY) === '1') t.checked = true; } catch(e) {}
+  }
+
   function changeVoiceLive() {
     if (!fullStoryText) return;
     var voiceId = document.getElementById('liveVoiceSelect').value;
@@ -2138,6 +2237,7 @@
     populateVoiceDropdowns();
     updateSpeedSlider(0.95);
     restorePremiumPref();
+    restoreFullCastPref();
   }
 
   if (document.readyState === 'loading') {
