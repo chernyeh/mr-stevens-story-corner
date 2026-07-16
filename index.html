@@ -1232,7 +1232,14 @@
     if (!pendingNarrationVoice || !fullStoryText) return;
     if (narrationAbortController) { narrationAbortController.abort(); }
     narrationAbortController = new AbortController();
-    var signal = narrationAbortController.signal;
+    // Captured so this call's completion handlers only ever clear the module-
+    // level controller if it's still THEIRS. Without this, an older aborted
+    // call settling after a newer call has started would null out the newer
+    // call's (still in-flight) controller, leaving it un-abortable by any
+    // subsequent load - two narrations could then race and corrupt each
+    // other's UI state, which is what made repeat loads unreliable.
+    var myController = narrationAbortController;
+    var signal = myController.signal;
 
     var voice      = pendingNarrationVoice;
     var storyTitle = pendingNarrationTitle;
@@ -1260,7 +1267,7 @@
       if (signal.aborted) return;
       if (hit && hit.blob) {
         // Cache hit: no synthesis, no cost, instant playback
-        narrationAbortController = null;
+        if (narrationAbortController === myController) narrationAbortController = null;
         narrationTimings = hit.timings || null;
         setupAudioPlayer(URL.createObjectURL(hit.blob));
         if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
@@ -1270,7 +1277,7 @@
 
       return generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal)
       .then(function(result) {
-        narrationAbortController = null;
+        if (narrationAbortController === myController) narrationAbortController = null;
         narrationTimings = result.timings || null;
         setupAudioPlayer(result.url);
         if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
@@ -1290,7 +1297,7 @@
       });
     })
     .catch(function(err) {
-      narrationAbortController = null;
+      if (narrationAbortController === myController) narrationAbortController = null;
       if (err.name === 'AbortError') return;
       if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
       document.getElementById('nowReading').textContent = '⚠️ Audio failed — change voice or retry';
@@ -1372,6 +1379,21 @@
         tx.onerror    = function() { resolve(); };
       });
     }).catch(function() { /* cache is best-effort */ });
+  }
+
+  // One AudioContext for the whole page's lifetime, reused across every
+  // narration load. Browsers cap the number of concurrent AudioContexts per
+  // page (commonly 4-6, and Safari is stricter and slow to actually release
+  // closed ones) - spinning up a fresh context per load (as this used to do,
+  // closing it when done) meant loading narration several times in one
+  // session - switching voices, retrying, reopening a saved story - could
+  // exhaust that cap and make every subsequent load fail outright.
+  var sharedAudioCtx = null;
+  function getSharedAudioCtx() {
+    if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+      sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return sharedAudioCtx;
   }
 
   // ── GOOGLE TTS ────────────────────────────────────────────────────────────
@@ -1891,7 +1913,7 @@
     };
 
     // ── Fetch all chunks in parallel, report section-count progress ──
-    var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var audioCtx = getSharedAudioCtx();
     var textChunkCount = chunks.filter(function(c){ return c.type !== 'silence'; }).length;
 
     // Map each chunk position to its text-chunk index (-1 for silence)
@@ -2015,11 +2037,9 @@
         offset += buf.length;
       });
       var wavBlob = audioBufferToWav(combined);
-      audioCtx.close();
+      // audioCtx is shared across loads (see getSharedAudioCtx) - it is
+      // intentionally not closed here.
       return { url: URL.createObjectURL(wavBlob), blob: wavBlob, warnings: chunkWarnings, timings: timings.length ? timings : null };
-    }).catch(function(err) {
-      audioCtx.close();
-      throw err;
     });
   }
 
