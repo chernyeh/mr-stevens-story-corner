@@ -1944,6 +1944,44 @@
       ]);
     }
 
+    // Bounded concurrency: firing every chunk's request at once (as this used
+    // to, via chunks.map + Promise.all) meant a long story's 40-65+
+    // paragraph-per-request chunks all hit the wire in the same instant. That
+    // can trip Google's per-project QPS quota for premium voice tiers and/or
+    // queue behind the browser's per-origin connection limit long enough to
+    // blow through the 30s per-chunk timeout below - and since dispatch order
+    // tracks array order, it was consistently the LAST chunk(s), i.e. almost
+    // always the finale, that lost that race. Retrying just repeated the same
+    // burst. Running only a handful of chunk requests at a time paces the
+    // burst, and (since withTimeout is now invoked lazily, only when a chunk
+    // actually gets its turn) each chunk's 30s budget no longer starts
+    // ticking before its request is even sent.
+    var CHUNK_CONCURRENCY = 5;
+    function runWithConcurrency(items, limit, worker) {
+      return new Promise(function(resolve, reject) {
+        if (items.length === 0) { resolve([]); return; }
+        var results = new Array(items.length);
+        var nextIndex = 0;
+        var settledCount = 0;
+        var rejected = false;
+
+        function startOne() {
+          if (rejected || nextIndex >= items.length) return;
+          var i = nextIndex++;
+          Promise.resolve(worker(items[i], i))
+            .then(function(res) { results[i] = res; }, function(err) { rejected = true; reject(err); })
+            .then(function() {
+              settledCount++;
+              if (rejected) return;
+              if (settledCount === items.length) { resolve(results); return; }
+              startOne();
+            });
+        }
+
+        for (var k = 0; k < Math.min(limit, items.length); k++) startOne();
+      });
+    }
+
     // Fetch one chunk with exponential-backoff retry (up to 3 retries)
     var TTS_URL = TTS_PROXY_URL;
     function fetchChunkWithRetry(chunk, ti, retriesLeft, delay) {
@@ -1982,7 +2020,7 @@
     // Count chunk failures for graceful degradation
     var chunkWarnings = 0;
 
-    var promises = chunks.map(function(chunk, idx) {
+    return runWithConcurrency(chunks, CHUNK_CONCURRENCY, function(chunk, idx) {
       var ti = chunkTextIdx[idx];
       if (chunk.type === 'silence') {
         var n = Math.floor(audioCtx.sampleRate * chunk.durationMs / 1000);
@@ -1998,9 +2036,7 @@
           var n = Math.round(audioCtx.sampleRate * 1.2);
           return audioCtx.createBuffer(1, n, audioCtx.sampleRate);
         });
-    });
-
-    return Promise.all(promises).then(function(buffers) {
+    }).then(function(buffers) {
       var ctxRate    = audioCtx.sampleRate;
       var numChannels = buffers.reduce(function(max, b){ return Math.max(max, b.numberOfChannels); }, 1);
       var totalLength = buffers.reduce(function(sum,  b){ return sum + b.length; }, 0);

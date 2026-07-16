@@ -2,11 +2,14 @@
 // The key was previously embedded in the client where anyone could lift it.
 
 // Fixed-window rate limiter. Per serverless instance (resets on cold start),
-// so it's a soft cap against gross abuse, not a hard guarantee. A single
-// story narration fires ~10-30 parallel synthesis requests, so the window
-// must comfortably fit a few stories.
+// so it's a soft cap against gross abuse, not a hard guarantee. The client
+// synthesizes one request per story paragraph (for read-along highlighting
+// timings), so a long story alone can be 40-65+ requests, and a retry after
+// a partial failure re-fires all of them - the window needs headroom for
+// several of those, not just "a few stories" worth of the old, more heavily
+// batched request count.
 const WINDOW_MS = 60 * 1000;
-const MAX_PER_WINDOW = 120;
+const MAX_PER_WINDOW = 400;
 const hits = new Map();
 
 function rateLimited(ip) {
