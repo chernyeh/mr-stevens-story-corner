@@ -1875,14 +1875,13 @@
     if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
 
     // ── Audio config ────────────────────────────────────────────────────────
-    // Multipliers include a +10% bump over the storyteller-cadence tuning,
-    // which read as too slow in practice. Synthesis always uses
-    // narrationBaseRate (the language default); the user's speed slider is
-    // applied at playback.
-    var effectiveSpeechRate = isJourney ? narrationBaseRate * 0.858
-                            : isStudio   ? narrationBaseRate * 0.946
-                            : isChinese  ? narrationBaseRate * 1.122
-                            : narrationBaseRate * 1.056;
+    // Multipliers: storyteller-cadence tuning, +10% (read as too slow), then
+    // -3% (the +10% overshot a touch). Synthesis always uses narrationBaseRate
+    // (the language default); the user's speed slider is applied at playback.
+    var effectiveSpeechRate = isJourney ? narrationBaseRate * 0.832
+                            : isStudio   ? narrationBaseRate * 0.918
+                            : isChinese  ? narrationBaseRate * 1.088
+                            : narrationBaseRate * 1.024;
 
     var audioConfig = {
       audioEncoding: 'MP3',
@@ -2138,7 +2137,7 @@
       voice: { languageCode: voice.lang, name: voiceId },
       audioConfig: {
         audioEncoding: 'MP3',
-        speakingRate: isJourney ? speechRate * 0.858 : isStudio ? speechRate * 0.946 : isChinese ? speechRate * 1.122 : speechRate * 1.056,
+        speakingRate: isJourney ? speechRate * 0.832 : isStudio ? speechRate * 0.918 : isChinese ? speechRate * 1.088 : speechRate * 1.024,
         pitch: (isJourney || isStudio) ? 0.0 : -2.0,
         effectsProfileId: ['headphone-class-device']
       }
