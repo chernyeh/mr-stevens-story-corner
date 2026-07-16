@@ -424,12 +424,12 @@
     en: {
       name: 'English', defaultVoice: 'en-GB-Journey-F', defaultRate: 0.95,
       promptInstruction: 'Write the entire story in English.',
-      narratorNote: 'Use commas for natural spoken pauses, em-dashes for dramatic pauses, and the occasional ellipsis (...) for a trailing, thoughtful pause. A few times per story, wrap one important word in *asterisks* for emphasis (e.g., "It was *impossible*") and use a rare parenthetical aside for a wry, knowing remark (e.g., "(though he would never admit it)"). When a character is small, young, or excitable, use dialogue-tag verbs like squeaked or cried; for a giant, monster, or elder, use rumbled or growled - these verbs shape how their voice sounds when read aloud. End every sentence with a full stop, exclamation mark, or question mark. Start a new paragraph for each new moment or scene shift. INVISIBLE VOICE TAGS (the reader never sees these; they only shape the narrator\'s voice): place [deep] immediately before a quotation spoken by a huge, gruff, or ancient character, and [high] immediately before a quotation spoken by a tiny, young, or squeaky one, e.g. [deep]"Who dares?" the giant rumbled. You may also start a paragraph with [tense], [calm], [happy], or [action] to set its mood. Use tags sparingly, only where they genuinely help.'
+      narratorNote: 'Use commas for natural spoken pauses, em-dashes for dramatic pauses, and the occasional ellipsis (...) for a trailing, thoughtful pause. A few times per story, wrap one important word in *asterisks* for emphasis (e.g., "It was *impossible*") and use a rare parenthetical aside for a wry, knowing remark (e.g., "(though he would never admit it)"). When a character is small, young, or excitable, use dialogue-tag verbs like squeaked or cried; for a giant, monster, or elder, use rumbled or growled - these verbs shape how their voice sounds when read aloud. End every sentence with a full stop, exclamation mark, or question mark. Start a new paragraph for each new moment or scene shift. INVISIBLE VOICE TAGS (the reader never sees these; they only shape the narrator\'s voice): place [deep] immediately before a quotation spoken by a huge, gruff, or ancient character, and [high] immediately before a quotation spoken by a tiny, young, or squeaky one, e.g. [deep]"Who dares?" the giant rumbled. ONLY tag a quotation when a character actually speaks it aloud in the scene - never for sayings, mottos, quoted signs or letters, or reported speech like "he always said...". You may also start a paragraph with [tense], [calm], [happy], or [action] to set its mood. Use tags sparingly, only where they genuinely help.'
     },
     fr: {
       name: 'French', defaultVoice: 'fr-FR-Studio-A', defaultRate: 0.78,
       promptInstruction: 'Write the entire story in French (fr-FR). All text including the title must be in French. IMPORTANT: This is for non-native French learners. Use simplified clear grammar: short sentences of max 12 words, common A2-B1 level vocabulary, avoid subjunctive, avoid complex tenses beyond passe compose and imparfait, avoid idiomatic expressions. Write so a learner can understand every sentence when read aloud slowly. After the closing </story> tag, add an <extras> tag containing: the heading "Nouveaux mots :" followed by 4 useful words from the story, each on its own line as "word — simple English meaning", then the heading "Questions :" followed by 2 very simple comprehension questions in French, each on its own line.',
-      narratorNote: 'Use commas for natural pauses, em-dashes for dramatic pauses. End every sentence clearly. New paragraph for each scene shift. INVISIBLE VOICE TAGS (never shown to the reader): place [deep] immediately before a quotation spoken by a huge or gruff character, [high] before a quotation from a tiny or young one. You may start a paragraph with [tense], [calm], [happy], or [action] to set its mood. Use sparingly.'
+      narratorNote: 'Use commas for natural pauses, em-dashes for dramatic pauses. End every sentence clearly. New paragraph for each scene shift. INVISIBLE VOICE TAGS (never shown to the reader): place [deep] immediately before a quotation spoken by a huge or gruff character, [high] before a quotation from a tiny or young one - only for words actually spoken aloud in the scene, never for sayings or reported speech. You may start a paragraph with [tense], [calm], [happy], or [action] to set its mood. Use sparingly.'
     },
     zh: {
       name: 'Mandarin Chinese', defaultVoice: 'cmn-CN-Wavenet-A', defaultRate: 0.78,
@@ -662,28 +662,32 @@
       '5-6':  ['A young wizard', 'A kind princess', 'A cheeky fox', 'A tiny fairy', 'A baby dragon', 'A lost robot'],
       '7-9':  ['A curious inventor', 'A fearless girl', 'A talking wolf', 'A time-travelling boy', 'A reluctant hero', 'A ghost with a secret'],
       '10-11':['A gifted outsider', 'Twins with opposite powers', 'A child detective', 'A girl who hears thoughts', 'A reluctant chosen one', 'A boy raised by wolves'],
-      '12-14':['A teenager with a secret past', 'A girl who questions everything', 'An outsider with hidden power', 'A boy torn between two worlds', 'A young rebel', 'An unreliable narrator']
+      '12-14':['A teenager with a secret past', 'A girl who questions everything', 'An outsider with hidden power', 'A boy torn between two worlds', 'A young rebel', 'An unreliable narrator'],
+      '15-16':['A student who notices too much', 'Someone living a double life', 'A narrator hiding something', 'Two friends drifting apart', 'A newcomer in a town that keeps secrets', 'An apprentice losing faith in their mentor']
     },
     settings: {
       '3-4':  ['A cosy woodland', 'A cloud kingdom', 'Under the ocean', 'A magic garden', 'A friendly village', 'The moon'],
       '5-6':  ['A hidden magic school', 'A pirate island', 'An enchanted forest', 'A space station', 'A castle', 'A bustling market'],
       '7-9':  ['A mountain with a curse', 'A sunken city', 'A hidden world underground', 'A haunted estate', 'A futuristic city', 'A wild jungle'],
       '10-11':['A parallel dimension', 'An ancient library with living books', 'A school for unusual abilities', 'A forgotten island', 'A city that never sleeps', 'A world where magic is forbidden'],
-      '12-14':['A fractured near-future city', 'A remote lighthouse', 'A village outside of time', 'A coastal town hiding a secret', 'An underground resistance base', 'A train with no clear destination']
+      '12-14':['A fractured near-future city', 'A remote lighthouse', 'A village outside of time', 'A coastal town hiding a secret', 'An underground resistance base', 'A train with no clear destination'],
+      '15-16':['A city rebuilding after the storm', 'A boarding school in deep winter', 'A border town between two worlds', 'A night train across the country', 'A crumbling seaside hotel', 'A future that almost happened']
     },
     twists: {
       '3-4':  ['Everything was a dream', 'A new friend appears', 'A surprise gift', 'Kindness solves the problem', 'A funny misunderstanding', 'Magic makes it all better'],
       '5-6':  ['The villain turns out to be friendly', 'A secret door is discovered', 'The weakness becomes a strength', 'A mysterious stranger helps', 'The magic has unexpected side effects', 'Everything is backwards'],
       '7-9':  ['The trusted friend is the real threat', 'The map leads somewhere unexpected', 'The hero must choose between two impossible things', 'The monster is misunderstood', 'Time starts running backwards', 'A forgotten prophecy comes true'],
       '10-11':['The narrator has been lying all along', 'The solution makes everything worse first', 'A character from the past returns changed', 'The power comes with a terrible cost', 'Two enemies must trust each other', 'The real enemy is within the group'],
-      '12-14':['Reality may not be what it seems', 'The protagonist is complicit in the problem', 'The ending is deliberately ambiguous', 'A sacrifice that changes everything', 'The antagonist turns out to be right', 'History repeats in an unexpected way']
+      '12-14':['Reality may not be what it seems', 'The protagonist is complicit in the problem', 'The ending is deliberately ambiguous', 'A sacrifice that changes everything', 'The antagonist turns out to be right', 'History repeats in an unexpected way'],
+      '15-16':['The memory was wrong all along', 'The rescue makes things worse', 'An act of kindness has a price', 'The truth arrives too late to matter', 'The stranger knew them all along', 'What was lost returns, changed']
     },
     endings: {
       '3-4':  ['Happy ever after', 'Home safe and loved', 'New friends made', 'A good night sleep', 'Everyone shares', 'A big warm hug'],
       '5-6':  ['The hero wins the day', 'A lesson learned with a smile', 'An unexpected friendship', 'A magical reward', 'Things go back to normal but better', 'A door left open for the next adventure'],
       '7-9':  ['Victory at a cost', 'Bittersweet but hopeful', 'The hero changed forever', 'Mystery solved, bigger mystery revealed', 'Peace restored for now', 'The adventure is only beginning'],
       '10-11':['Hard-won resolution', 'Characters transformed by events', 'Justice but not perfectly', 'Loss that leads to growth', 'The world is changed by what happened', 'Open-ended, the reader decides'],
-      '12-14':['Ambiguous, truth left to reader', 'Resolution with emotional cost', 'Hopeful but earned', 'Full circle but different now', 'Quiet and devastating', 'A final image that says everything']
+      '12-14':['Ambiguous, truth left to reader', 'Resolution with emotional cost', 'Hopeful but earned', 'Full circle but different now', 'Quiet and devastating', 'A final image that says everything'],
+      '15-16':['Understated and unresolved', 'A quiet act of defiance', 'Acceptance without forgiveness', 'The truth spoken at last', 'Leaving, finally, for good', 'A small hope against the dark']
     }
   };
 
@@ -857,7 +861,12 @@
     var container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
-    shuffle(((BUILDER[dataKey] || {})[selectedAge]) || []).slice(0, 5).forEach(function(itemLabel) {
+    // Fall back to the oldest age band if an age key is ever missing, so a
+    // data gap degrades to slightly-off suggestions instead of no chips at
+    // all (age 15-16 shipped with no BUILDER entries and showed only the
+    // bare Shuffle button until its lists were added).
+    var chipData = (BUILDER[dataKey] || {})[selectedAge] || (BUILDER[dataKey] || {})['12-14'] || [];
+    shuffle(chipData).slice(0, 5).forEach(function(itemLabel) {
       var chip = document.createElement('div');
       chip.className = 'builder-chip';
       chip.textContent = itemLabel;
@@ -1256,9 +1265,10 @@
     if (playBtn) { playBtn.disabled = true; playBtn.style.opacity = '0.4'; }
     document.getElementById('nowReading').textContent = '🎙️ Loading narration…';
 
-    function updateProgress(done, total) {
-      document.getElementById('nowReading').textContent =
-        '🎙️ Loading… ' + done + ' of ' + total + ' sections ready';
+    function updateProgress(done, total, note) {
+      document.getElementById('nowReading').textContent = (note === 'busy')
+        ? '🎙️ ' + done + ' of ' + total + ' ready — voice service is busy, waiting to retry…'
+        : '🎙️ Loading… ' + done + ' of ' + total + ' sections ready';
     }
 
     var cacheKey = audioCacheKey(text, voice.id, storyTitle);
@@ -1534,8 +1544,19 @@
       return (v && v.id !== voiceId) ? v : null;
     }
 
+    // The cast voice is only for dialogue actually SPOKEN in the scene. A
+    // quote the narrator merely refers to - a saying, a motto, someone's
+    // often-said words - must stay in the narrator's voice. So keyword
+    // casting requires a deep attribution VERB near the quote (someone is
+    // rumbling/growling it right now), not just a deep noun like 'giant',
+    // and reported/habitual speech ("he always said...") is never cast even
+    // when tagged.
+    var CAST_LOW_VERB_RE = /\b(rumbled|growled|boomed|bellowed|roared|thundered|grumbled|croaked|rasped)\b/i;
+    var REPORTED_SPEECH_RE = /\b(always|often|usually|would|used to|once|famously|liked to)\s+(?:\w+\s+){0,2}(say|says|said|saying|repeat|repeated|remind|reminded|rumble|rumbled|growl|growled|boom|boomed|roar|roared)\b[^“”]*$/i;
+
     // Split a paragraph into narrator / deep-voiced segments. Quotes that are
-    // not 'low' stay in the narrator segment (handled by wrapDialogue as usual).
+    // not cast-worthy stay in the narrator segment (handled by wrapDialogue
+    // as usual, including its subtler pitch-shift treatment).
     function splitCastSegments(para) {
       var segs = [];
       var cursor = 0;
@@ -1544,12 +1565,14 @@
       while ((m = re.exec(para)) !== null) {
         var tag = m[1] ? m[1].toLowerCase() : null;
         var start = m.index;
-        var mood = (tag === 'deep' || tag === 'low') ? 'low'
-                 : tag === 'high' ? 'high'
-                 : classifyDialogueContext(
-                     para.slice(Math.max(0, start - DIALOGUE_CONTEXT_WINDOW), start) + ' '
-                     + para.slice(re.lastIndex, re.lastIndex + DIALOGUE_CONTEXT_WINDOW));
-        if (mood === 'low') {
+        var before = para.slice(Math.max(0, start - DIALOGUE_CONTEXT_WINDOW), start);
+        var after  = para.slice(re.lastIndex, re.lastIndex + DIALOGUE_CONTEXT_WINDOW);
+        var isCast = false;
+        if (!REPORTED_SPEECH_RE.test(before)) {
+          if (tag === 'deep' || tag === 'low') isCast = true;
+          else if (!tag) isCast = CAST_LOW_VERB_RE.test(before + ' ' + after);
+        }
+        if (isCast) {
           if (start > cursor) segs.push({ text: para.slice(cursor, start), cast: false });
           segs.push({ text: m[2], cast: true }); // the quote only; tag is dropped
           cursor = re.lastIndex;
@@ -1982,9 +2005,54 @@
       });
     }
 
-    // Fetch one chunk with exponential-backoff retry (up to 3 retries)
     var TTS_URL = TTS_PROXY_URL;
-    function fetchChunkWithRetry(chunk, ti, retriesLeft, delay) {
+
+    // ── Quota-aware pacing ──────────────────────────────────────────────────
+    // Google enforces a PER-MINUTE request quota on premium voice tiers. A
+    // long story (~65 sections) exhausts it partway through the batch, and
+    // since the pool dispatches in order, the tail sections are exactly the
+    // ones left stranded - always including the finale. The old retries made
+    // it worse: 1-2-4s backoffs all landed inside the same still-exhausted
+    // quota window, and the 30s timeout wrapped the whole retry chain so
+    // patient waiting was impossible. This gate fixes the semantics: the
+    // moment any request comes back 429/quota-exhausted, every subsequent
+    // dispatch and retry waits behind a shared cooldown that pushes further
+    // out on repeated hits (capped at ~65s - quota windows are per-minute,
+    // waiting longer is wasted). The 30s timeout now applies per attempt.
+    var quotaCooldownUntil = 0;
+
+    function abortableSleep(ms) {
+      return new Promise(function(resolve, reject) {
+        setTimeout(function() {
+          if (signal && signal.aborted) {
+            var e = new Error('aborted'); e.name = 'AbortError'; reject(e);
+          } else { resolve(); }
+        }, ms);
+      });
+    }
+
+    function isQuotaError(err) {
+      var m = String(err && err.message || '').toLowerCase();
+      return m.indexOf('429') !== -1 || m.indexOf('quota') !== -1
+          || m.indexOf('too many') !== -1 || m.indexOf('exhaust') !== -1
+          || m.indexOf('rate limit') !== -1;
+    }
+
+    function noteQuotaError() {
+      var from = Math.max(Date.now(), quotaCooldownUntil);
+      quotaCooldownUntil = Math.min(from + 10000, Date.now() + 65000);
+      // Tell the player UI why loading has paused
+      if (typeof onProgress === 'function') onProgress(completedSections, textChunkCount, 'busy');
+    }
+
+    function waitForQuotaGate() {
+      var wait = quotaCooldownUntil - Date.now();
+      if (wait <= 0) return Promise.resolve();
+      return abortableSleep(Math.min(wait, 1500)).then(waitForQuotaGate);
+    }
+
+    // One network attempt, individually time-boxed
+    function fetchChunkOnce(chunk) {
       var reqBody = {
         input: chunk.type === 'ssml' ? { ssml: chunk.value } : { text: chunk.value },
         // Full-cast segments override the narrator with a companion voice
@@ -1993,25 +2061,38 @@
           : { languageCode: languageCode, name: voiceId },
         audioConfig: audioConfig
       };
-      return fetch(TTS_URL, { method: 'POST', signal: signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) })
-        .then(function(r) {
-          if (!r.ok) return r.json().then(function(e){ throw new Error((e && e.error && e.error.message) ? e.error.message : 'TTS error ' + r.status); });
-          return r.json();
-        })
-        .then(function(d) {
-          if (!d.audioContent) throw new Error('No audio content received');
-          var bin = atob(d.audioContent);
-          var ab = new ArrayBuffer(bin.length);
-          var view = new Uint8Array(ab);
-          for (var k = 0; k < bin.length; k++) view[k] = bin.charCodeAt(k);
-          return audioCtx.decodeAudioData(ab);
-        })
+      return withTimeout(
+        fetch(TTS_URL, { method: 'POST', signal: signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) })
+          .then(function(r) {
+            if (!r.ok) return r.json().then(function(e){ throw new Error((e && e.error && e.error.message) ? e.error.message : 'TTS error ' + r.status); });
+            return r.json();
+          })
+          .then(function(d) {
+            if (!d.audioContent) throw new Error('No audio content received');
+            var bin = atob(d.audioContent);
+            var ab = new ArrayBuffer(bin.length);
+            var view = new Uint8Array(ab);
+            for (var k = 0; k < bin.length; k++) view[k] = bin.charCodeAt(k);
+            return audioCtx.decodeAudioData(ab);
+          }),
+        30000);
+    }
+
+    function fetchChunkWithRetry(chunk, ti, retriesLeft, delay) {
+      return waitForQuotaGate()
+        .then(function() { return fetchChunkOnce(chunk); })
         .then(function(decoded) { addPhase(ti, 1.0); return decoded; })
         .catch(function(err) {
           if (err.name === 'AbortError') throw err;
           if (retriesLeft > 0) {
-            return new Promise(function(res){ setTimeout(res, delay); })
-              .then(function(){ return fetchChunkWithRetry(chunk, ti, retriesLeft - 1, delay * 2); });
+            var quota = isQuotaError(err);
+            if (quota) noteQuotaError();
+            // Quota hits don't grow the backoff - the shared gate (checked at
+            // the top of the next attempt) already paces them, and they
+            // shouldn't be punished twice
+            return abortableSleep(quota ? 500 : delay).then(function() {
+              return fetchChunkWithRetry(chunk, ti, retriesLeft - 1, quota ? delay : delay * 2);
+            });
           }
           throw err;
         });
@@ -2026,7 +2107,9 @@
         var n = Math.floor(audioCtx.sampleRate * chunk.durationMs / 1000);
         return Promise.resolve(audioCtx.createBuffer(1, n, audioCtx.sampleRate));
       }
-      return withTimeout(fetchChunkWithRetry(chunk, ti, 3, 1000), 30000)
+      // 5 retries: quota recovery can need to outlast a full per-minute
+      // window, so a chunk must survive several gate waits before giving up
+      return fetchChunkWithRetry(chunk, ti, 5, 1000)
         .catch(function(err) {
           if (err.name === 'AbortError') throw err;
           chunkWarnings++;
