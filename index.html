@@ -2430,8 +2430,13 @@
     saveBtn.classList.add('saved');
     saveBtn.disabled = true;
 
-    // Set voice selector to saved voice
-    populateVoiceSelector();
+    // Set voice selector to saved voice. populateVoiceSelector() does not
+    // exist (populateVoiceDropdowns() is the real function) - calling it threw
+    // a ReferenceError that silently aborted the rest of this function, so
+    // pendingNarrationVoice was never set and the auto-load below never ran,
+    // leaving the Load Narration button's onclick a no-op (loadNarration()
+    // bails out immediately when pendingNarrationVoice is empty).
+    populateVoiceDropdowns();
     var vs = document.getElementById('liveVoiceSelect');
     if (story.voiceId) {
       for (var j = 0; j < vs.options.length; j++) {
