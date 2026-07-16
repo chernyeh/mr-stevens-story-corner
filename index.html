@@ -90,6 +90,13 @@
   .story-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .meta-tag { padding: 4px 12px; background: white; border-radius: 50px; font-size: 0.75rem; font-weight: 700; color: #888; border: 1.5px solid #e8e0d0; }
   .story-text { font-family: 'Playfair Display',serif; font-size: 1.05rem; line-height: 1.9; color: #3a3228; margin-bottom: 32px; white-space: pre-wrap; }
+  .story-para { margin: 0 0 1.15em; white-space: pre-wrap; border-radius: 8px; transition: background 0.5s ease, box-shadow 0.5s ease; }
+  .story-para.reading { background: rgba(232,160,69,0.14); box-shadow: 0 0 0 7px rgba(232,160,69,0.14); }
+  .story-extras { background: #fbf6ea; border: 1px solid rgba(232,160,69,0.3); border-radius: 12px; padding: 16px 18px; margin: -8px 0 26px; font-size: 0.9rem; line-height: 1.75; white-space: pre-wrap; color: #3a3228; }
+  .premium-row { display: flex; align-items: center; gap: 9px; margin-top: 16px; font-size: 0.85rem; cursor: pointer; opacity: 0.9; }
+  .premium-row input { accent-color: var(--gold); width: 16px; height: 16px; cursor: pointer; }
+  .fullcast-label { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: rgba(26,26,46,0.65); cursor: pointer; flex: 1; }
+  .fullcast-label input { accent-color: var(--gold); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
   .audio-player { background: #fffdf7; border: 1px solid rgba(232,160,69,0.25); border-radius: 14px; padding: 14px 18px; color: var(--ink); box-shadow: 0 1px 8px rgba(26,26,46,0.07); margin-bottom: 20px; }
   .player-voice { display: none; }
   .audio-status { font-size: 0.75rem; color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; animation: pulse 1.5s ease-in-out infinite; }
@@ -282,6 +289,10 @@
         <div class="slider-labels"><span>2 min</span><span>5 min</span><span>10 min</span><span>15 min</span></div>
         <input type="range" id="lengthSlider" min="2" max="15" value="5">
       </div>
+      <label class="premium-row">
+        <input type="checkbox" id="premiumToggle" onchange="savePremiumPref()">
+        <span>✨ Extra-special story — our finest storytelling, takes a little longer</span>
+      </label>
     </div>
 
     <button class="generate-btn" id="generateBtn" style="display:none" onclick="generateStory()">🌙 Create My Story</button>
@@ -333,10 +344,18 @@
           </div>
           <span class="speed-value-label" id="speedValueLabel">Normal</span>
         </div>
+        <div class="player-setting-row">
+          <span class="player-setting-label">🎭 Full cast</span>
+          <label class="fullcast-label" title="Giants, monsters and other deep-voiced characters are spoken by a second, deeper narrator">
+            <input type="checkbox" id="fullCastToggle" onchange="changeFullCast()">
+            <span>Deep characters get their own voice (beta)</span>
+          </label>
+        </div>
       </div>
-      <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Changing voice or speed regenerates audio.</p>
+      <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Speed changes are instant; changing voice regenerates audio.</p>
     </div>
     <div class="story-text" id="storyText"></div>
+    <div class="story-extras" id="storyExtras" style="display:none"></div>
     <div class="story-actions">
       <button class="save-btn" id="saveBtn" onclick="saveStory()">🌟 Save Story</button>
       <button class="new-story-btn-small" id="newStoryBtn" onclick="newStory()">🌙 New Story</button>
@@ -346,14 +365,18 @@
 <script>
   // ── KEYS ──────────────────────────────────────────────────────────────────
   var ANTHROPIC_KEY  = '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';
-  var GOOGLE_TTS_KEY = 'AIzaSyBzs3xuCmmsTHDX9pCj05STWuHGBFE5Aow';
+  // Google TTS calls go through /api/tts so the API key stays server-side
+  var TTS_PROXY_URL = '/api/tts';
 
   // ── STATE ─────────────────────────────────────────────────────────────────
   var selectedAge   = null;
   var selectedStyle = null;
   var selectedLang  = 'en';
-  var speechRate    = 0.95;
+  var speechRate    = 0.95;   // user speed preference (applied via playbackRate)
+  var narrationBaseRate = 0.95; // rate the current audio was synthesized at
   var fullStoryText = '';
+  var storyExtrasText = ''; // learner glossary/questions (fr/zh), shown but never narrated
+  var narrationTimings = null; // [{para, start, end}] for read-along highlighting
   var currentAudio  = null;
   var pendingNarrationVoice = null;
   var pendingNarrationTitle = '';
@@ -397,16 +420,16 @@
     en: {
       name: 'English', defaultVoice: 'en-GB-Journey-F', defaultRate: 0.95,
       promptInstruction: 'Write the entire story in English.',
-      narratorNote: 'Use commas for natural spoken pauses, em-dashes for dramatic pauses, and the occasional ellipsis (...) for a trailing, thoughtful pause. A few times per story, wrap one important word in *asterisks* for emphasis (e.g., "It was *impossible*") and use a rare parenthetical aside for a wry, knowing remark (e.g., "(though he would never admit it)"). When a character is small, young, or excitable, use dialogue-tag verbs like squeaked or cried; for a giant, monster, or elder, use rumbled or growled - these verbs shape how their voice sounds when read aloud. End every sentence with a full stop, exclamation mark, or question mark. Start a new paragraph for each new moment or scene shift.'
+      narratorNote: 'Use commas for natural spoken pauses, em-dashes for dramatic pauses, and the occasional ellipsis (...) for a trailing, thoughtful pause. A few times per story, wrap one important word in *asterisks* for emphasis (e.g., "It was *impossible*") and use a rare parenthetical aside for a wry, knowing remark (e.g., "(though he would never admit it)"). When a character is small, young, or excitable, use dialogue-tag verbs like squeaked or cried; for a giant, monster, or elder, use rumbled or growled - these verbs shape how their voice sounds when read aloud. End every sentence with a full stop, exclamation mark, or question mark. Start a new paragraph for each new moment or scene shift. INVISIBLE VOICE TAGS (the reader never sees these; they only shape the narrator\'s voice): place [deep] immediately before a quotation spoken by a huge, gruff, or ancient character, and [high] immediately before a quotation spoken by a tiny, young, or squeaky one, e.g. [deep]"Who dares?" the giant rumbled. You may also start a paragraph with [tense], [calm], [happy], or [action] to set its mood. Use tags sparingly, only where they genuinely help.'
     },
     fr: {
       name: 'French', defaultVoice: 'fr-FR-Studio-A', defaultRate: 0.78,
-      promptInstruction: 'Write the entire story in French (fr-FR). All text including the title must be in French. IMPORTANT: This is for non-native French learners. Use simplified clear grammar: short sentences of max 12 words, common A2-B1 level vocabulary, avoid subjunctive, avoid complex tenses beyond passe compose and imparfait, avoid idiomatic expressions. Write so a learner can understand every sentence when read aloud slowly.',
-      narratorNote: 'Use commas for natural pauses, em-dashes for dramatic pauses. End every sentence clearly. New paragraph for each scene shift.'
+      promptInstruction: 'Write the entire story in French (fr-FR). All text including the title must be in French. IMPORTANT: This is for non-native French learners. Use simplified clear grammar: short sentences of max 12 words, common A2-B1 level vocabulary, avoid subjunctive, avoid complex tenses beyond passe compose and imparfait, avoid idiomatic expressions. Write so a learner can understand every sentence when read aloud slowly. After the closing </story> tag, add an <extras> tag containing: the heading "Nouveaux mots :" followed by 4 useful words from the story, each on its own line as "word — simple English meaning", then the heading "Questions :" followed by 2 very simple comprehension questions in French, each on its own line.',
+      narratorNote: 'Use commas for natural pauses, em-dashes for dramatic pauses. End every sentence clearly. New paragraph for each scene shift. INVISIBLE VOICE TAGS (never shown to the reader): place [deep] immediately before a quotation spoken by a huge or gruff character, [high] before a quotation from a tiny or young one. You may start a paragraph with [tense], [calm], [happy], or [action] to set its mood. Use sparingly.'
     },
     zh: {
       name: 'Mandarin Chinese', defaultVoice: 'cmn-CN-Wavenet-A', defaultRate: 0.78,
-      promptInstruction: 'Write the entire story in Mandarin Chinese using Simplified Chinese characters. All text including the title must be in Chinese. IMPORTANT: This is for non-native Mandarin learners. Use simplified clear language: short sentences of max 8 characters per clause, use only common HSK 1-3 vocabulary, avoid chengyu idioms, use simple subject-verb-object structure, no complex grammar patterns. Write so a learner can understand every sentence when read aloud slowly.',
+      promptInstruction: 'Write the entire story in Mandarin Chinese using Simplified Chinese characters. All text including the title must be in Chinese. IMPORTANT: This is for non-native Mandarin learners. Use simplified clear language: short sentences of max 8 characters per clause, use only common HSK 1-3 vocabulary, avoid chengyu idioms, use simple subject-verb-object structure, no complex grammar patterns. Write so a learner can understand every sentence when read aloud slowly. After the closing </story> tag, add an <extras> tag containing: the heading "生词：" followed by 4 useful words from the story, each on its own line as "word (pinyin) — simple English meaning", then the heading "问题：" followed by 2 very simple comprehension questions in Chinese, each on its own line.',
       narratorNote: 'Use Chinese commas for natural pauses. End every sentence with a Chinese period, exclamation or question mark. Start a new paragraph for each new moment or scene shift.'
     }
   };
@@ -736,6 +759,22 @@
     speechRate = parseFloat(val);
     var lbl = document.getElementById('speedValueLabel');
     if (lbl) lbl.textContent = speedLabel(val);
+    applyPlaybackSpeed();
+  }
+
+  // Speed changes are free and instant: audio is synthesized once at the
+  // language's base rate and the user's speed is applied as playbackRate
+  // with pitch preservation - no re-synthesis, no extra TTS cost.
+  function applyPlaybackSpeed() {
+    if (!currentAudio) return;
+    var rate = speechRate / (narrationBaseRate || 0.95);
+    if (rate < 0.5) rate = 0.5;
+    if (rate > 2)   rate = 2;
+    try {
+      currentAudio.preservesPitch = true;
+      currentAudio.webkitPreservesPitch = true;
+      currentAudio.playbackRate = rate;
+    } catch (e) { /* older browsers: rate change still works, pitch may shift */ }
   }
 
   // ── AGE SELECTION ─────────────────────────────────────────────────────────
@@ -876,6 +915,65 @@
     });
   }
 
+  // ── RECENT STORY MEMORY (anti-repetition) ─────────────────────────────────
+  // Remembers the last dozen titles and protagonist names so new stories
+  // don't recycle them - repetition is the thing kids notice fastest.
+  var RECENT_KEY = 'mrStevens_recent';
+
+  function loadRecent() {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); }
+    catch(e) { return []; }
+  }
+
+  function extractCharacterNames(text) {
+    var SKIP = {};
+    ('The A An And But Or She He They It Its Then When His Her Their That This These Those What Now One Once As At In On So If For From With You We Was Were Had Have Who Why How Where There Here Yes No Not All By Every Inside Outside Suddenly Finally Perhaps Maybe Even Just Still Some Oh To Of Up Down Out Over Under Before After Because While Though Although Beyond Behind Above Below Never Always Soon Tonight Today Tomorrow Yesterday Mister Missus Miss Doctor Mr Mrs Ms Dr End Chapter').split(' ')
+      .forEach(function(w) { SKIP[w] = 1; });
+    var counts = {};
+    (text.match(/\b[A-Z][a-z]{2,}\b/g) || []).forEach(function(w) {
+      if (!SKIP[w]) counts[w] = (counts[w] || 0) + 1;
+    });
+    return Object.keys(counts)
+      .filter(function(w) { return counts[w] >= 3; })
+      .sort(function(a, b) { return counts[b] - counts[a]; })
+      .slice(0, 3);
+  }
+
+  function recordRecentStory(title, text) {
+    var recent = loadRecent();
+    recent.unshift({ title: title || '', names: extractCharacterNames(text || '') });
+    if (recent.length > 12) recent.length = 12;
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch(e) { /* best-effort */ }
+  }
+
+  function getAvoidClause() {
+    var recent = loadRecent();
+    if (!recent.length) return '';
+    var titles = [], names = [];
+    recent.forEach(function(r) {
+      if (r.title) titles.push(r.title);
+      (r.names || []).forEach(function(n) { if (names.indexOf(n) === -1) names.push(n); });
+    });
+    var parts = [];
+    if (titles.length) parts.push('Recent titles (avoid similar titles AND similar central ideas): ' + titles.slice(0, 10).join('; '));
+    if (names.length)  parts.push('Recently used character names (choose different ones): ' + names.slice(0, 15).join(', '));
+    return parts.length ? '\n- FRESHNESS: This child has heard these stories before. ' + parts.join('. ') + '.' : '';
+  }
+
+  // ── PREMIUM STORY TOGGLE ──────────────────────────────────────────────────
+  var PREMIUM_KEY = 'mrStevens_premium';
+  function isPremiumStory() {
+    var t = document.getElementById('premiumToggle');
+    return !!(t && t.checked);
+  }
+  function savePremiumPref() {
+    try { localStorage.setItem(PREMIUM_KEY, isPremiumStory() ? '1' : '0'); } catch(e) {}
+  }
+  function restorePremiumPref() {
+    var t = document.getElementById('premiumToggle');
+    try { if (t && localStorage.getItem(PREMIUM_KEY) === '1') t.checked = true; } catch(e) {}
+  }
+
   // ── GENERATE STORY ────────────────────────────────────────────────────────
   function generateStory() {
     var theme   = document.getElementById('themeInput').value.trim();
@@ -913,13 +1011,14 @@
       + '- Do not include word count or meta-commentary\n'
       + '- CHARACTER NAMES: Be creative and varied. NEVER use the names Marcus, Maya, or Ms. Chen. Choose fresh, distinctive names suited to the story world.\n'
       + '- STORY TITLE: Be inventive. NEVER start with "The Weight of". Avoid heavy abstract nouns as title openers. Titles can be playful, concrete, intriguing, or surprising.\n'
-      + '- NARRATION: ' + cfg.narratorNote;
+      + '- NARRATION: ' + cfg.narratorNote
+      + getAvoidClause();
 
     fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: isPremiumStory() ? 'claude-sonnet-5' : 'claude-haiku-4-5-20251001',
         max_tokens: 4096,
         stream: true,
         messages: [{ role: 'user', content: prompt }]
@@ -945,6 +1044,7 @@
         document.getElementById('storyTitle').textContent   = '…';
         document.getElementById('storyText').textContent    = '';
         document.getElementById('storyMeta').innerHTML      = '';
+        renderStoryExtras('');
         document.getElementById('nowReading').textContent   = 'Audio will be ready when story finishes...';
         document.getElementById('progressFill').style.width = '0%';
         document.getElementById('playBtn').textContent      = '▶';
@@ -1003,6 +1103,58 @@
     });
   }
 
+  // Narration hint tags the model may emit ([deep]/[high] before quotes,
+  // [tense]/[calm]/[happy]/[action] at paragraph starts). They steer the TTS
+  // but must never be shown to the reader.
+  function stripNarrationTags(s) {
+    return String(s).replace(/\[(?:deep|high|low|tense|calm|happy|action)\]\s*/gi, '');
+  }
+
+  // Render the story as one <p> per paragraph so the narrator's current
+  // paragraph can be highlighted during playback. Split must mirror the
+  // narration's paragraph split so data-para indices line up with timings.
+  function renderStoryText(text) {
+    var container = document.getElementById('storyText');
+    container.innerHTML = '';
+    String(text).trim().split(/\n\s*\n/).forEach(function(p, i) {
+      if (!p.trim()) return;
+      var el = document.createElement('p');
+      el.className = 'story-para';
+      el.dataset.para = i;
+      el.textContent = stripNarrationTags(p.trim());
+      container.appendChild(el);
+    });
+  }
+
+  function renderStoryExtras(extras) {
+    var el = document.getElementById('storyExtras');
+    if (!el) return;
+    if (extras && extras.trim()) {
+      el.textContent = extras.trim();
+      el.style.display = 'block';
+    } else {
+      el.textContent = '';
+      el.style.display = 'none';
+    }
+  }
+
+  function updateReadingHighlight(t) {
+    var paras = document.querySelectorAll('#storyText .story-para');
+    if (!paras.length) return;
+    var active = -1;
+    if (narrationTimings && t >= 0) {
+      for (var i = 0; i < narrationTimings.length; i++) {
+        if (t >= narrationTimings[i].start && t < narrationTimings[i].end) {
+          active = narrationTimings[i].para;
+          break;
+        }
+      }
+    }
+    for (var j = 0; j < paras.length; j++) {
+      paras[j].classList.toggle('reading', parseInt(paras[j].dataset.para, 10) === active);
+    }
+  }
+
   function updateStoryDisplay(rawText) {
     // Title: complete tag or partial (streaming)
     var tm = rawText.match(/<title>([\s\S]*?)<\/title>/);
@@ -1019,7 +1171,7 @@
     var sStart = rawText.indexOf('<story>');
     if (sStart !== -1) {
       var partial = rawText.slice(sStart + 7).replace(/<\/story>[\s\S]*$/, '').trim();
-      document.getElementById('storyText').textContent = partial;
+      document.getElementById('storyText').textContent = stripNarrationTags(partial);
     }
   }
 
@@ -1030,6 +1182,11 @@
       storyTitle = tm[1].trim();
       document.getElementById('storyTitle').textContent = storyTitle;
     }
+    // Learner extras (French/Mandarin glossary + questions) - displayed under
+    // the story but excluded from narration, which only reads <story> content
+    var xm = rawText.match(/<extras>([\s\S]*?)<\/extras>/);
+    storyExtrasText = xm ? xm[1].trim() : '';
+
     var storyText = '';
     var sm = rawText.match(/<story>([\s\S]*?)<\/story>/);
     if (sm) {
@@ -1038,7 +1195,7 @@
       // Partial <story> tag (truncated stream) or old-format fallback
       var sTagIdx = rawText.indexOf('<story>');
       if (sTagIdx !== -1) {
-        storyText = rawText.slice(sTagIdx + 7).trim();
+        storyText = rawText.slice(sTagIdx + 7).replace(/<extras>[\s\S]*$/, '').trim();
       } else {
         var legacyIdx = rawText.indexOf('STORY:');
         storyText = legacyIdx !== -1 ? rawText.slice(legacyIdx + 6).replace(/^\s*\n/, '').trim() : rawText.trim();
@@ -1050,7 +1207,9 @@
   function finishStory(storyTitle, storyText, voice, cfg, minutes) {
     fullStoryText = storyText.trim();
     if (!fullStoryText) { showError('No story content received. Please try again.'); return; }
-    document.getElementById('storyText').textContent = fullStoryText;
+    recordRecentStory(storyTitle, fullStoryText);
+    renderStoryText(fullStoryText);
+    renderStoryExtras(storyExtrasText);
     document.getElementById('storyMeta').innerHTML =
       '<span class="meta-tag">Age ' + selectedAge + '</span>' +
       '<span class="meta-tag">' + minutes + ' min</span>' +
@@ -1074,6 +1233,9 @@
     var voice      = pendingNarrationVoice;
     var storyTitle = pendingNarrationTitle;
     var text       = fullStoryText;
+    // Synthesize at the language's default rate; the user's speed preference
+    // is applied afterwards as playbackRate (free, instant, cache-friendly)
+    narrationBaseRate = (LANG_CONFIG[selectedLang] || LANG_CONFIG.en).defaultRate;
 
     var lnr     = document.getElementById('loadNarrationRow');
     var pc      = document.getElementById('playerControls');
@@ -1088,22 +1250,40 @@
         '🎙️ Loading… ' + done + ' of ' + total + ' sections ready';
     }
 
-    generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal)
-    .then(function(result) {
-      narrationAbortController = null;
-      setupAudioPlayer(result.url);
-      if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
-      if (result.warnings > 0) {
-        document.getElementById('nowReading').textContent =
-          '⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' failed to load — press ▶ or retry';
-        if (lnr) {
-          lnr.style.display = 'block';
-          var retryBtn = document.getElementById('loadNarrationBtn');
-          if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = '🔄 Retry narration'; }
-        }
-      } else {
+    var cacheKey = audioCacheKey(text, voice.id, storyTitle);
+
+    audioCacheGet(cacheKey).then(function(hit) {
+      if (signal.aborted) return;
+      if (hit && hit.blob) {
+        // Cache hit: no synthesis, no cost, instant playback
+        narrationAbortController = null;
+        narrationTimings = hit.timings || null;
+        setupAudioPlayer(URL.createObjectURL(hit.blob));
+        if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
         document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
+        return;
       }
+
+      return generateGoogleAudio(text, voice.id, voice.lang, storyTitle, updateProgress, signal)
+      .then(function(result) {
+        narrationAbortController = null;
+        narrationTimings = result.timings || null;
+        setupAudioPlayer(result.url);
+        if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
+        if (result.warnings > 0) {
+          // Don't cache partial audio - a retry should re-synthesize
+          document.getElementById('nowReading').textContent =
+            '⚠️ ' + result.warnings + ' section' + (result.warnings !== 1 ? 's' : '') + ' failed to load — press ▶ or retry';
+          if (lnr) {
+            lnr.style.display = 'block';
+            var retryBtn = document.getElementById('loadNarrationBtn');
+            if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = '🔄 Retry narration'; }
+          }
+        } else {
+          audioCachePut(cacheKey, result.blob, result.timings);
+          document.getElementById('nowReading').textContent = 'Ready — press ▶ to begin';
+        }
+      });
     })
     .catch(function(err) {
       narrationAbortController = null;
@@ -1124,6 +1304,70 @@
     if (t < 0) t = 0;
     if (currentAudio.duration && t > currentAudio.duration) t = currentAudio.duration;
     currentAudio.currentTime = t;
+  }
+
+  // ── AUDIO CACHE (IndexedDB) ───────────────────────────────────────────────
+  // Replays and voice re-selection of the same story cost nothing: finished
+  // narrations are cached locally, keyed by story + voice + pipeline version.
+  var AUDIO_CACHE_DB = 'mrStevens_audio';
+  var AUDIO_CACHE_STORE = 'narrations';
+  var AUDIO_CACHE_MAX = 8; // WAV blobs are big; keep only the most recent
+  var NARRATION_PIPELINE_V = 3; // bump to invalidate cached audio after pipeline changes
+
+  function openAudioCache() {
+    return new Promise(function(resolve, reject) {
+      if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+      var req = indexedDB.open(AUDIO_CACHE_DB, 1);
+      req.onupgradeneeded = function() {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(AUDIO_CACHE_STORE)) {
+          db.createObjectStore(AUDIO_CACHE_STORE, { keyPath: 'key' });
+        }
+      };
+      req.onsuccess = function() { resolve(req.result); };
+      req.onerror   = function() { reject(req.error); };
+    });
+  }
+
+  function audioCacheKey(text, voiceId, title) {
+    // djb2-style double hash - cheap, synchronous, good enough for cache keys
+    var s = NARRATION_PIPELINE_V + '|' + voiceId + '|' + narrationBaseRate
+      + '|cast' + (isFullCastEnabled() ? 1 : 0) + '|' + title + '|' + text;
+    var h1 = 5381, h2 = 52711;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i);
+      h1 = (Math.imul(h1, 33) ^ c) >>> 0;
+      h2 = (Math.imul(h2, 31) ^ c) >>> 0;
+    }
+    return h1.toString(36) + '-' + h2.toString(36) + '-' + s.length;
+  }
+
+  function audioCacheGet(key) {
+    return openAudioCache().then(function(db) {
+      return new Promise(function(resolve) {
+        var tx = db.transaction(AUDIO_CACHE_STORE, 'readonly');
+        var rq = tx.objectStore(AUDIO_CACHE_STORE).get(key);
+        rq.onsuccess = function() { resolve(rq.result || null); };
+        rq.onerror   = function() { resolve(null); };
+      });
+    }).catch(function() { return null; });
+  }
+
+  function audioCachePut(key, blob, timings) {
+    return openAudioCache().then(function(db) {
+      return new Promise(function(resolve) {
+        var tx = db.transaction(AUDIO_CACHE_STORE, 'readwrite');
+        var store = tx.objectStore(AUDIO_CACHE_STORE);
+        store.put({ key: key, blob: blob, timings: timings || null, t: Date.now() });
+        var all = store.getAll();
+        all.onsuccess = function() {
+          var entries = (all.result || []).sort(function(a, b) { return b.t - a.t; });
+          for (var i = AUDIO_CACHE_MAX; i < entries.length; i++) store.delete(entries[i].key);
+        };
+        tx.oncomplete = function() { resolve(); };
+        tx.onerror    = function() { resolve(); };
+      });
+    }).catch(function() { /* cache is best-effort */ });
   }
 
   // ── GOOGLE TTS ────────────────────────────────────────────────────────────
@@ -1243,14 +1487,70 @@
       return 'neutral';
     }
 
+    // ── Full-cast dialogue (beta) ───────────────────────────────────────────
+    // When enabled, quotes classified 'low' ([deep] tag or keyword scan) are
+    // synthesized with a deeper companion voice from the same engine family
+    // and stitched inline, instead of pitch-shifting the narrator.
+    var CAST_LOW_VOICES = {
+      en: { journey: { id: 'en-US-Journey-D', lang: 'en-US' },
+            neural2: { id: 'en-US-Neural2-D', lang: 'en-US' },
+            studio:  { id: 'en-US-Studio-Q',  lang: 'en-US' } },
+      fr: { journey: { id: 'fr-FR-Journey-D', lang: 'fr-FR' },
+            neural2: { id: 'fr-FR-Neural2-B', lang: 'fr-FR' },
+            studio:  { id: 'fr-FR-Studio-D',  lang: 'fr-FR' } }
+    };
+
+    function castLowVoice() {
+      var byLang = CAST_LOW_VOICES[(languageCode || 'en').slice(0, 2)];
+      var engine = isJourney ? 'journey' : isStudio ? 'studio' : 'neural2';
+      var v = byLang && byLang[engine];
+      // No cast voice if unsupported language or the narrator IS that voice
+      return (v && v.id !== voiceId) ? v : null;
+    }
+
+    // Split a paragraph into narrator / deep-voiced segments. Quotes that are
+    // not 'low' stay in the narrator segment (handled by wrapDialogue as usual).
+    function splitCastSegments(para) {
+      var segs = [];
+      var cursor = 0;
+      var re = /(?:\[(deep|low|high)\]\s*)?(“[^”]{1,300}”)/g;
+      var m;
+      while ((m = re.exec(para)) !== null) {
+        var tag = m[1] ? m[1].toLowerCase() : null;
+        var start = m.index;
+        var mood = (tag === 'deep' || tag === 'low') ? 'low'
+                 : tag === 'high' ? 'high'
+                 : classifyDialogueContext(
+                     para.slice(Math.max(0, start - DIALOGUE_CONTEXT_WINDOW), start) + ' '
+                     + para.slice(re.lastIndex, re.lastIndex + DIALOGUE_CONTEXT_WINDOW));
+        if (mood === 'low') {
+          if (start > cursor) segs.push({ text: para.slice(cursor, start), cast: false });
+          segs.push({ text: m[2], cast: true }); // the quote only; tag is dropped
+          cursor = re.lastIndex;
+        }
+      }
+      if (cursor < para.length) segs.push({ text: para.slice(cursor), cast: false });
+      return segs;
+    }
+
     // Wrap dialogue quotes and speech-attribution verbs in prosody
     function wrapDialogue(s) {
-      // Step 1: pitch/rate-shift quoted speech based on nearby dialogue-tag keywords.
-      // Studio voices don't honor the pitch attribute, so they lean on a wider rate swing instead.
+      // Explicit voice tags from the story model win over keyword guessing:
+      // [deep]"…" / [high]"…" become ¤ markers the quote-matcher checks for.
+      // Any tag not directly before a quote is stripped so it's never spoken.
+      s = s.replace(/\[(?:deep|low)\]\s*(?=“)/gi, '¤L');
+      s = s.replace(/\[high\]\s*(?=“)/gi, '¤H');
+      s = s.replace(/\[(?:deep|high|low|tense|calm|happy|action)\]\s*/gi, '');
+      // Step 1: pitch/rate-shift quoted speech based on the model's voice tag,
+      // falling back to nearby dialogue-verb keywords. Studio voices don't
+      // honor the pitch attribute, so they lean on a wider rate swing instead.
       s = s.replace(/“[^”]{1,300}”/g, function(quote, offset, full) {
         var before = full.slice(Math.max(0, offset - DIALOGUE_CONTEXT_WINDOW), offset);
         var after  = full.slice(offset + quote.length, offset + quote.length + DIALOGUE_CONTEXT_WINDOW);
-        var mood   = classifyDialogueContext(before + ' ' + after);
+        var mood;
+        if (/¤L$/.test(before))      mood = 'low';
+        else if (/¤H$/.test(before)) mood = 'high';
+        else mood = classifyDialogueContext(before + ' ' + after);
         if (isStudio) {
           if (mood === 'high') return '<prosody rate="130%">' + quote + '</prosody>';
           if (mood === 'low')  return '<prosody rate="78%">'  + quote + '</prosody>';
@@ -1272,11 +1572,15 @@
         s = s.replace(attrA, '$1<break time="150ms"/>$2<prosody rate="82%" pitch="-0.5st">$3</prosody>$4');
         s = s.replace(attrB, '$1<break time="150ms"/>$2$3<prosody rate="82%" pitch="-0.5st">$4</prosody>$5');
       }
+      // Remove the voice-tag markers so they're never spoken
+      s = s.replace(/¤[LH]/g, '');
       return s;
     }
 
-    // Keyword-based mood detection: returns { rate, pitch } for per-paragraph prosody
-    function detectParagraphMood(paraText) {
+    // Keyword-based mood detection: returns { rate, pitch } for per-paragraph
+    // prosody. forcedMood (from a model-emitted [tense]/[calm]/[happy]/[action]
+    // tag) overrides the keyword scan.
+    function detectParagraphMood(paraText, forcedMood) {
       var baseRate  = isFrench ? 91 : 88;
       var basePitch = isFrench ? -0.5 : -1.0;
       var MOODS = [
@@ -1304,15 +1608,22 @@
             'murmured','lullaby','drowsy','hummed','rested'
         ]}
       ];
-      var lower = paraText.toLowerCase();
       var best = null, bestScore = 0;
-      for (var mi = 0; mi < MOODS.length; mi++) {
-        var m = MOODS[mi], score = 0, seen = {};
-        for (var wi = 0; wi < m.words.length; wi++) {
-          var w = m.words[wi];
-          if (!seen[w] && lower.indexOf(w) !== -1) { score++; seen[w] = true; }
+      if (forcedMood) {
+        for (var fi = 0; fi < MOODS.length; fi++) {
+          if (MOODS[fi].name === String(forcedMood).toUpperCase()) { best = MOODS[fi]; bestScore = 99; break; }
         }
-        if (score > bestScore) { bestScore = score; best = m; }
+      }
+      if (!best) {
+        var lower = paraText.toLowerCase();
+        for (var mi = 0; mi < MOODS.length; mi++) {
+          var m = MOODS[mi], score = 0, seen = {};
+          for (var wi = 0; wi < m.words.length; wi++) {
+            var w = m.words[wi];
+            if (!seen[w] && lower.indexOf(w) !== -1) { score++; seen[w] = true; }
+          }
+          if (score > bestScore) { bestScore = score; best = m; }
+        }
       }
       var rateOff  = (best && bestScore >= 3) ? best.rateOff  : 0;
       var pitchOff = (best && bestScore >= 3) ? best.pitchOff : 0;
@@ -1350,7 +1661,11 @@
     // in as a real silence chunk instead.
     function buildSsmlChunk(paraGroup) {
       var parts = paraGroup.map(function(para) {
-        var mood  = detectParagraphMood(para);
+        // A model-emitted mood tag at the paragraph start overrides keyword detection
+        var forced = null;
+        var mt = para.match(/^\[(tense|calm|happy|action)\]\s*/i);
+        if (mt) { forced = mt[1]; para = para.slice(mt[0].length); }
+        var mood  = detectParagraphMood(para, forced);
         var inner = paragraphInnerSsml(para);
         if (isStudio) {
           return '<prosody rate="' + mood.rate + '">' + inner + '</prosody>';
@@ -1365,6 +1680,8 @@
     // Processes one paragraph's text for Journey voices (plain text with pause tricks)
     function processJourneyText(para) {
       var s = para;
+      // Journey can't shift pitch, so voice/mood tags are simply removed here
+      s = s.replace(/\[(?:deep|high|low|tense|calm|happy|action)\]\s*/gi, '');
       // Journey has no SSML/markdown support - drop *emphasis* asterisks so it
       // isn't tempted to speak them literally; the surrounding words still carry the weight.
       s = s.replace(/\*([^*\n]+?)\*/g, '$1').replace(/\*/g, '');
@@ -1436,6 +1753,8 @@
 
     // ── Split into merged chunks ────────────────────────────────────────────
     var chunks = [];
+    var paraCount = 0; // narration paragraphs, for finale para indexing
+    var castVoice = (!isChinese && isFullCastEnabled()) ? castLowVoice() : null;
 
     if (storyTitle) {
       chunks.push(titleChunk(storyTitle));
@@ -1470,37 +1789,49 @@
       // Journey ignores SSML, and merged paragraphs used to run together when
       // the in-text dot trick failed - and got NO pause at all whenever a
       // paragraph boundary fell on a chunk boundary.
-      var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
+      var paras = text.split(/\n\s*\n/).filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
+      paraCount = paras.length;
       paras.forEach(function(p, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: 1300 });
-        chunks.push(buildJourneyChunk(p.trim()));
+        var segs = castVoice ? splitCastSegments(p.trim()) : [{ text: p.trim(), cast: false }];
+        segs.forEach(function(seg) {
+          if (!seg.text.trim()) return;
+          var c = buildJourneyChunk(seg.text.trim());
+          // A segment can be only tags (e.g. "[tense]" before a cast quote)
+          // and end up empty once processed - never send an empty request
+          if (!c.value.trim()) return;
+          if (seg.cast) c.voice = castVoice;
+          c.para = i; // paragraph index, for read-along highlighting timings
+          chunks.push(c);
+        });
       });
     } else {
-      var paras = text.split('\n\n').filter(function(p){ return p.trim().length > 0; });
+      // One request per paragraph here too: chunk boundaries always fall on
+      // paragraph boundaries, pauses are stitched silence, and each chunk maps
+      // 1:1 to a display paragraph for read-along highlighting.
+      var paras = text.split(/\n\s*\n/).filter(function(p){ return p.trim().length > 0; });
       if (paras.length === 0) paras = [text.trim()];
-      var paraLensS = paras.map(function(p){ return paragraphInnerSsml(p.trim()).length; });
-      var totalLenS = paraLensS.reduce(function(a, b){ return a + b; }, 0);
-      var sHardMax = 3500, sTarget = 2000;
-      var sNumChunks = Math.max(1, Math.ceil(totalLenS / sTarget));
-      var sTargetPer = Math.ceil(totalLenS / sNumChunks);
-      var groups = [];
-      var group = [], groupLen = 0;
+      paraCount = paras.length;
       paras.forEach(function(p, i) {
-        var plen = paraLensS[i];
-        if (group.length > 0 && (groupLen + plen > sHardMax || groupLen >= sTargetPer)) {
-          groups.push(group);
-          group = []; groupLen = 0;
-        }
-        group.push(p.trim());
-        groupLen += plen;
-      });
-      if (group.length > 0) groups.push(group);
-      // Stitch the same paragraph gap at chunk boundaries as inside chunks,
-      // so pacing stays even wherever the split happens to fall.
-      groups.forEach(function(g, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: PARAGRAPH_GAP_MS });
-        chunks.push(buildSsmlChunk(g));
+        var segs = castVoice ? splitCastSegments(p.trim()) : [{ text: p.trim(), cast: false }];
+        segs.forEach(function(seg) {
+          // A segment can be only tags (e.g. "[tense]" before a cast quote) -
+          // never send an empty request
+          var spoken = seg.text.replace(/\[(?:deep|high|low|tense|calm|happy|action)\]\s*/gi, '').trim();
+          if (!spoken) return;
+          var c;
+          if (seg.cast) {
+            // Real second voice: no narrator pitch-shift, just gentle pacing
+            c = { type: 'ssml', voice: castVoice,
+                  value: '<speak><prosody rate="88%">' + addBreaks(escXml(spoken)) + '</prosody></speak>' };
+          } else {
+            c = buildSsmlChunk([seg.text.trim()]);
+          }
+          c.para = i;
+          chunks.push(c);
+        });
       });
     }
 
@@ -1508,16 +1839,19 @@
     // Finality contour: "The" lifts slightly (suspended, expectant), then
     // "End." falls and settles. The lead-in pause is stitched silence for all
     // engines rather than an in-SSML break.
+    // The finale maps to display paragraph index paraCount: if the story text
+    // ends with its own "The End" line (stripped from narration), that display
+    // paragraph sits right after the narrated ones and highlights here.
     if (isJourney) {
       chunks.push({ type: 'silence', durationMs: 2200 });
       // The ellipsis suspends "The" on a hanging (raised) tone; the full stop
       // gives "End." Journey's natural downward, settled close.
-      chunks.push({ type: 'text', value: 'The...  End.' });
+      chunks.push({ type: 'text', value: 'The...  End.', para: paraCount });
     } else if (isStudio) {
       // Studio ignores the pitch attribute, so lean on emphasis + the pause +
       // sentence-final period for the rise/fall shape.
       chunks.push({ type: 'silence', durationMs: 2200 });
-      chunks.push({ type: 'ssml', value: '<speak>'
+      chunks.push({ type: 'ssml', para: paraCount, value: '<speak>'
         + '<prosody rate="55%" volume="-2dB">'
         + '<emphasis level="moderate">The</emphasis><break time="500ms"/> End.'
         + '</prosody>'
@@ -1526,7 +1860,7 @@
     } else {
       chunks.push({ type: 'silence', durationMs: 2200 });
       var endFall = isChinese ? '-2st' : '-4st';
-      chunks.push({ type: 'ssml', value: '<speak>'
+      chunks.push({ type: 'ssml', para: paraCount, value: '<speak>'
         + '<prosody rate="55%" volume="-2dB">'
         + '<prosody pitch="+1st">The</prosody><break time="500ms"/> <prosody pitch="' + endFall + '">End.</prosody>'
         + '</prosody>'
@@ -1537,12 +1871,13 @@
     if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
 
     // ── Audio config ────────────────────────────────────────────────────────
-    // Multipliers sit ~4-5% below their previous values for a slightly more
-    // deliberate storyteller pace across every engine.
-    var effectiveSpeechRate = isJourney ? speechRate * 0.78
-                            : isStudio   ? speechRate * 0.86
-                            : isChinese  ? speechRate * 1.02
-                            : speechRate * 0.96;
+    // Multipliers sit ~4-5% below their pre-tuning values for a slightly more
+    // deliberate storyteller pace. Synthesis always uses narrationBaseRate
+    // (the language default); the user's speed slider is applied at playback.
+    var effectiveSpeechRate = isJourney ? narrationBaseRate * 0.78
+                            : isStudio   ? narrationBaseRate * 0.86
+                            : isChinese  ? narrationBaseRate * 1.02
+                            : narrationBaseRate * 0.96;
 
     var audioConfig = {
       audioEncoding: 'MP3',
@@ -1584,11 +1919,14 @@
     }
 
     // Fetch one chunk with exponential-backoff retry (up to 3 retries)
-    var TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY;
+    var TTS_URL = TTS_PROXY_URL;
     function fetchChunkWithRetry(chunk, ti, retriesLeft, delay) {
       var reqBody = {
         input: chunk.type === 'ssml' ? { ssml: chunk.value } : { text: chunk.value },
-        voice: { languageCode: languageCode, name: voiceId },
+        // Full-cast segments override the narrator with a companion voice
+        voice: chunk.voice
+          ? { languageCode: chunk.voice.lang, name: chunk.voice.id }
+          : { languageCode: languageCode, name: voiceId },
         audioConfig: audioConfig
       };
       return fetch(TTS_URL, { method: 'POST', signal: signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) })
@@ -1629,7 +1967,9 @@
           if (err.name === 'AbortError') throw err;
           chunkWarnings++;
           addPhase(ti, 1.0 - progressWeights[ti]); // mark complete even on failure
-          var n = Math.round(audioCtx.sampleRate * 5); // ~5 s silence at correct sample rate
+          // Short gap instead of the old mysterious 5s of dead air; the player
+          // surfaces the failure and offers a retry
+          var n = Math.round(audioCtx.sampleRate * 1.2);
           return audioCtx.createBuffer(1, n, audioCtx.sampleRate);
         });
     });
@@ -1639,11 +1979,32 @@
       var numChannels = buffers.reduce(function(max, b){ return Math.max(max, b.numberOfChannels); }, 1);
       var totalLength = buffers.reduce(function(sum,  b){ return sum + b.length; }, 0);
       var combined    = audioCtx.createBuffer(numChannels, totalLength, ctxRate);
+      // ~8ms fade at each buffer edge: butt-joining decoded chunks can cut a
+      // waveform mid-cycle, which is audible as a click at every stitch point
+      var fadeN = Math.round(ctxRate * 0.008);
+      // Paragraph timings for read-along highlighting: chunks carry their
+      // paragraph index, and we know each buffer's exact position in the mix
+      var timings = [];
       var offset = 0;
-      buffers.forEach(function(buf) {
+      buffers.forEach(function(buf, bi) {
+        var chunk = chunks[bi];
+        if (chunk && typeof chunk.para === 'number' && chunk.para >= 0) {
+          var startS = offset / ctxRate;
+          var endS   = (offset + buf.length) / ctxRate;
+          var lastT  = timings[timings.length - 1];
+          if (lastT && lastT.para === chunk.para) lastT.end = endS;
+          else timings.push({ para: chunk.para, start: startS, end: endS });
+        }
+        var n = Math.min(fadeN, Math.floor(buf.length / 4));
         for (var ch = 0; ch < numChannels; ch++) {
           if (ch < buf.numberOfChannels) {
-            combined.getChannelData(ch).set(buf.getChannelData(ch), offset);
+            var data = buf.getChannelData(ch);
+            for (var f = 0; f < n; f++) {
+              var g = f / n;
+              data[f] *= g;                        // fade in
+              data[buf.length - 1 - f] *= g;       // fade out
+            }
+            combined.getChannelData(ch).set(data, offset);
           }
           // channels absent in this buffer stay zero (silence)
         }
@@ -1651,7 +2012,7 @@
       });
       var wavBlob = audioBufferToWav(combined);
       audioCtx.close();
-      return { url: URL.createObjectURL(wavBlob), warnings: chunkWarnings };
+      return { url: URL.createObjectURL(wavBlob), blob: wavBlob, warnings: chunkWarnings, timings: timings.length ? timings : null };
     }).catch(function(err) {
       audioCtx.close();
       throw err;
@@ -1708,10 +2069,12 @@
   function setupAudioPlayer(url) {
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     currentAudio = new Audio(url);
+    applyPlaybackSpeed();
     currentAudio.addEventListener('timeupdate', function() {
       if (!currentAudio.duration) return;
       document.getElementById('progressFill').style.width = (currentAudio.currentTime / currentAudio.duration * 100) + '%';
       document.getElementById('currentTime').textContent  = formatTime(currentAudio.currentTime);
+      updateReadingHighlight(currentAudio.currentTime);
     });
     currentAudio.addEventListener('loadedmetadata', function() {
       document.getElementById('totalTime').textContent = formatTime(currentAudio.duration);
@@ -1720,6 +2083,7 @@
       document.getElementById('playBtn').textContent    = '\u25b6';
       document.getElementById('nowReading').textContent = 'Story complete';
       document.getElementById('progressFill').style.width = '100%';
+      updateReadingHighlight(-1);
     });
   }
   function togglePlay() {
@@ -1740,6 +2104,7 @@
     document.getElementById('progressFill').style.width = '0%';
     document.getElementById('currentTime').textContent  = '0:00';
     document.getElementById('nowReading').textContent   = 'Press play to begin narration';
+    updateReadingHighlight(-1);
   }
   function previewVoice() {
     var btn = document.getElementById('previewVoiceBtn');
@@ -1773,7 +2138,7 @@
         effectsProfileId: ['headphone-class-device']
       }
     };
-    fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY, {
+    fetch(TTS_PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reqBody)
@@ -1796,6 +2161,23 @@
     });
   }
 
+  // ── FULL-CAST DIALOGUE (beta) ─────────────────────────────────────────────
+  var FULLCAST_KEY = 'mrStevens_fullcast';
+  function isFullCastEnabled() {
+    var t = document.getElementById('fullCastToggle');
+    return !!(t && t.checked);
+  }
+  function changeFullCast() {
+    try { localStorage.setItem(FULLCAST_KEY, isFullCastEnabled() ? '1' : '0'); } catch(e) {}
+    if (!fullStoryText) return;
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    loadNarration();
+  }
+  function restoreFullCastPref() {
+    var t = document.getElementById('fullCastToggle');
+    try { if (t && localStorage.getItem(FULLCAST_KEY) === '1') t.checked = true; } catch(e) {}
+  }
+
   function changeVoiceLive() {
     if (!fullStoryText) return;
     var voiceId = document.getElementById('liveVoiceSelect').value;
@@ -1815,6 +2197,8 @@
     document.getElementById('storyCard').classList.remove('visible');
     document.getElementById('setupSection').style.display = 'block';
     selectedAge = null; selectedStyle = null; fullStoryText = '';
+    storyExtrasText = ''; narrationTimings = null;
+    renderStoryExtras('');
     // Reset save button
     var saveBtn = document.getElementById('saveBtn');
     if (saveBtn) { saveBtn.textContent = '🌟 Save Story'; saveBtn.classList.remove('saved'); saveBtn.disabled = false; }
@@ -1836,12 +2220,8 @@
     }
     var speedSlider = document.getElementById('speedSlider');
     if (speedSlider) {
+      // Speed applies live via playbackRate - no regeneration needed
       speedSlider.addEventListener('input', function() { updateSpeedSlider(speedSlider.value); });
-      speedSlider.addEventListener('change', function() {
-        if (!fullStoryText) return;
-        if (currentAudio) currentAudio.pause();
-        loadNarration();
-      });
     }
     var liveVoice = document.getElementById('liveVoiceSelect');
     if (liveVoice) liveVoice.addEventListener('change', changeVoiceLive);
@@ -1856,6 +2236,8 @@
     updateSliderGradient();
     populateVoiceDropdowns();
     updateSpeedSlider(0.95);
+    restorePremiumPref();
+    restoreFullCastPref();
   }
 
   if (document.readyState === 'loading') {
@@ -1921,7 +2303,9 @@
     var btn = document.getElementById('saveBtn');
     if (btn.classList.contains('saved')) return;
     var title = document.getElementById('storyTitle').textContent;
-    var text  = document.getElementById('storyText').textContent;
+    // Save the raw story text (with paragraph breaks and narration tags), not
+    // the rendered DOM text - <p> textContent would collapse paragraphs
+    var text  = fullStoryText;
     if (!title || !text) return;
     var lib = loadLibrary();
     var entry = {
@@ -1929,6 +2313,7 @@
       title:    title,
       text:     text,
       synopsis: getSynopsis(text),
+      extras:   storyExtrasText || '',
       lang:     selectedLang,
       age:      selectedAge,
       style:    selectedStyle,
@@ -2005,8 +2390,10 @@
 
     // Populate story card
     document.getElementById('storyTitle').textContent = story.title;
-    document.getElementById('storyText').textContent  = story.text;
+    renderStoryText(story.text);
     fullStoryText = story.text;
+    storyExtrasText = story.extras || '';
+    renderStoryExtras(storyExtrasText);
     document.getElementById('storyMeta').innerHTML =
       (story.age   ? '<span class="meta-tag">Age ' + story.age + '</span>' : '') +
       (story.style ? '<span class="meta-tag">Style of ' + story.style.author + '</span>' : '') +
