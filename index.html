@@ -1333,7 +1333,7 @@
   var AUDIO_CACHE_DB = 'mrStevens_audio';
   var AUDIO_CACHE_STORE = 'narrations';
   var AUDIO_CACHE_MAX = 8; // WAV blobs are big; keep only the most recent
-  var NARRATION_PIPELINE_V = 3; // bump to invalidate cached audio after pipeline changes
+  var NARRATION_PIPELINE_V = 4; // bump to invalidate cached audio after pipeline changes
 
   function openAudioCache() {
     return new Promise(function(resolve, reject) {
@@ -1891,18 +1891,24 @@
     // The finale maps to display paragraph index paraCount: if the story text
     // ends with its own "The End" line (stripped from narration), that display
     // paragraph sits right after the narrated ones and highlights here.
+    // "The" here precedes the vowel-initial "End", so it is pronounced "thee"
+    // (/ðiː/). The engines otherwise clip the short function word down to a bare
+    // "th" - especially when it is pitch-shifted/emphasised and butted against a
+    // break - so spell the intended sound out: "Thee" as plain text for Journey
+    // (no SSML), and <sub alias="Thee"> for the SSML voices (keeps the word "The"
+    // in the markup while forcing a clear pronunciation).
     if (isJourney) {
       chunks.push({ type: 'silence', durationMs: 2200 });
-      // The ellipsis suspends "The" on a hanging (raised) tone; the full stop
+      // The ellipsis suspends "Thee" on a hanging (raised) tone; the full stop
       // gives "End." Journey's natural downward, settled close.
-      chunks.push({ type: 'text', value: 'The...  End.', para: paraCount });
+      chunks.push({ type: 'text', value: 'Thee...  End.', para: paraCount });
     } else if (isStudio) {
       // Studio ignores the pitch attribute, so lean on emphasis + the pause +
       // sentence-final period for the rise/fall shape.
       chunks.push({ type: 'silence', durationMs: 2200 });
       chunks.push({ type: 'ssml', para: paraCount, value: '<speak>'
         + '<prosody rate="55%" volume="-2dB">'
-        + '<emphasis level="moderate">The</emphasis><break time="500ms"/> End.'
+        + '<emphasis level="moderate"><sub alias="Thee">The</sub></emphasis><break time="500ms"/> End.'
         + '</prosody>'
         + '<break time="1500ms"/>'
         + '</speak>' });
@@ -1911,7 +1917,7 @@
       var endFall = isChinese ? '-2st' : '-4st';
       chunks.push({ type: 'ssml', para: paraCount, value: '<speak>'
         + '<prosody rate="55%" volume="-2dB">'
-        + '<prosody pitch="+1st">The</prosody><break time="500ms"/> <prosody pitch="' + endFall + '">End.</prosody>'
+        + '<prosody pitch="+1st"><sub alias="Thee">The</sub></prosody><break time="500ms"/> <prosody pitch="' + endFall + '">End.</prosody>'
         + '</prosody>'
         + '<break time="1500ms"/>'
         + '</speak>' });
