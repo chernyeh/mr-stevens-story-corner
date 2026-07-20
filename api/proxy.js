@@ -35,7 +35,15 @@ export default async function handler(req, res) {
   }
 
   try {
+    // req.body may arrive already parsed (object) or raw (string) depending on
+    // how the platform delivers it. Normalise so the `stream` flag is detected
+    // reliably either way; the forwarded body is left byte-identical.
+    let parsedBody = req.body;
+    if (typeof parsedBody === 'string') {
+      try { parsedBody = JSON.parse(parsedBody); } catch (e) { parsedBody = {}; }
+    }
     const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    const wantsStream = !!(parsedBody && parsedBody.stream);
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -48,7 +56,20 @@ export default async function handler(req, res) {
     });
 
     // Streaming: pipe SSE events through to the client
-    if (req.body && req.body.stream) {
+    if (wantsStream) {
+      // A streaming request can still fail before any SSE is produced (bad
+      // request, rate limit, overload, auth/credit). Anthropic returns those
+      // as a normal JSON error with a non-2xx status - NOT an event stream.
+      // Forward them as JSON with the real status so the client shows an
+      // actual error instead of silently rendering an empty story.
+      if (!response.ok) {
+        const errText = await response.text();
+        try {
+          return res.status(response.status).json(JSON.parse(errText));
+        } catch (e) {
+          return res.status(response.status).json({ error: { message: 'Story generation failed: ' + errText.substring(0, 200) } });
+        }
+      }
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('X-Accel-Buffering', 'no');
