@@ -52,6 +52,13 @@
   .age-pill { padding: 10px 18px; border-radius: 50px; border: 2px solid transparent; background: white; cursor: pointer; font-family: 'Nunito',sans-serif; font-weight: 700; font-size: 0.85rem; color: #666; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.06); touch-action: manipulation; -webkit-tap-highlight-color: transparent; appearance: none; }
   .age-pill:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
   .age-pill.selected { background: var(--ink); color: var(--gold); border-color: var(--ink); transform: translateY(-2px); box-shadow: 0 4px 14px rgba(26,26,46,0.25); }
+  .mode-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+  .mode-pill { flex: 1 1 210px; padding: 14px 16px; border-radius: 16px; border: 2px solid #e8e0d0; background: white; cursor: pointer; font-family: 'Nunito',sans-serif; text-align: left; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.06); touch-action: manipulation; -webkit-tap-highlight-color: transparent; appearance: none; }
+  .mode-pill:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
+  .mode-pill.selected { border-color: var(--gold); background: #fdf8ee; transform: translateY(-2px); box-shadow: 0 4px 14px rgba(232,160,69,0.22); }
+  .mode-pill-title { font-weight: 700; font-size: 0.95rem; color: var(--ink); margin-bottom: 3px; }
+  .mode-pill-desc { font-size: 0.76rem; color: #999; font-weight: 600; line-height: 1.4; }
+  .accuracy-note { font-size: 0.75rem; color: #7d7361; background: #fbf6ea; border: 1px solid rgba(232,160,69,0.3); border-radius: 10px; padding: 10px 13px; margin-top: 13px; line-height: 1.55; }
   .theme-input { width: 100%; padding: 14px 18px; border: 2px solid #e8e0d0; border-radius: 14px; font-family: 'Nunito',sans-serif; font-size: 1rem; color: var(--ink); background: white; transition: border-color 0.2s; outline: none; resize: none; }
   .theme-input:focus { border-color: var(--gold); }
   .theme-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
@@ -242,6 +249,21 @@
       </div>
     </div>
 
+    <div class="card" id="modeCard" style="display:none">
+      <div class="section-title"><span>🧭</span> What kind of story?</div>
+      <div class="mode-grid">
+        <button class="mode-pill selected" data-mode="story" onclick="selectMode(this)">
+          <div class="mode-pill-title">📖 Story</div>
+          <div class="mode-pill-desc">Invented characters, places and adventures</div>
+        </button>
+        <button class="mode-pill" data-mode="discover" onclick="selectMode(this)">
+          <div class="mode-pill-title">🔭 Discover</div>
+          <div class="mode-pill-desc">True stories from history, science, art and cultures</div>
+        </button>
+      </div>
+      <p class="accuracy-note" id="discoverNote" style="display:none">🔍 Discover pieces are non-fiction, shaped around IB Middle Years Programme subject groups and global contexts. They stick to well-established facts and flag where experts genuinely disagree — but do check anything surprising before quoting it.</p>
+    </div>
+
     <div class="card" id="languageCard" style="display:none">
       <div class="section-title"><span>🌍</span> Story language</div>
       <div class="lang-grid">
@@ -252,42 +274,42 @@
       <p class="voice-tip" style="margin-top:10px">💡 The story choices are always in English. The story itself and its narration will be in the language you select.</p>
     </div>
     <div class="card" id="themeCard" style="display:none">
-      <div class="section-title"><span>✨</span> What's the story about?</div>
+      <div class="section-title"><span id="themeCardIcon">✨</span> <span id="themeCardTitle">What's the story about?</span></div>
       <textarea class="theme-input" id="themeInput" rows="2" oninput="if(selectedAge) renderBuilder()" placeholder="e.g. A little dragon who learns to share..."></textarea>
       <div class="theme-suggestions" id="themeSuggestions"></div>
     </div>
     <div class="card" id="storyBuilderCard" style="display:none">
-      <div class="section-title"><span>🎲</span> Shape your story <span class="optional-tag">optional</span></div>
+      <div class="section-title"><span>🎲</span> <span id="builderCardTitle">Shape your story</span> <span class="optional-tag">optional</span></div>
 
       <div class="builder-section" id="characterSection">
-        <div class="builder-label">🧒 Main character</div>
+        <div class="builder-label" id="characterLabel">🧒 Main character</div>
         <div class="builder-chips" id="characterChips"></div>
         <input class="builder-input" id="characterInput" placeholder="Or describe your own character…">
       </div>
 
       <div class="builder-section">
-        <div class="builder-label">🌍 Setting</div>
+        <div class="builder-label" id="settingLabel">🌍 Setting</div>
         <div class="builder-chips" id="settingChips"></div>
         <input class="builder-input" id="settingInput" placeholder="Or describe your own setting…">
       </div>
 
       <div class="builder-section">
-        <div class="builder-label">⚡ Story twist</div>
+        <div class="builder-label" id="twistLabel">⚡ Story twist</div>
         <div class="builder-chips" id="twistChips"></div>
         <input class="builder-input" id="twistInput" placeholder="Or add your own twist…">
       </div>
 
       <div class="builder-section">
-        <div class="builder-label">💫 How does it end?</div>
+        <div class="builder-label" id="endingLabel">💫 How does it end?</div>
         <div class="builder-chips" id="endingChips"></div>
       </div>
     </div>
     <div class="card" id="styleCard" style="display:none">
-      <div class="section-title"><span>🖊️</span> Choose a writing style</div>
+      <div class="section-title"><span>🖊️</span> <span id="styleCardTitle">Choose a writing style</span></div>
       <div class="style-grid" id="styleGrid"></div>
     </div>
     <div class="card" id="lengthCard" style="display:none">
-      <div class="section-title"><span>⏱️</span> How long should the story be?</div>
+      <div class="section-title"><span>⏱️</span> <span id="lengthCardTitle">How long should the story be?</span></div>
       <div class="slider-container">
         <div class="length-display" id="lengthDisplay">5 <span>minutes</span></div>
         <div class="slider-labels"><span>2 min</span><span>5 min</span><span>10 min</span><span>15 min</span></div>
@@ -376,6 +398,7 @@
   var selectedAge   = null;
   var selectedStyle = null;
   var selectedLang  = 'en';
+  var selectedMode  = 'story'; // 'story' (fiction) | 'discover' (IB non-fiction)
   var speechRate    = 0.95;   // user speed preference (applied via playbackRate)
   var narrationBaseRate = 0.95; // rate the current audio was synthesized at
   var fullStoryText = '';
@@ -424,15 +447,23 @@
     en: {
       name: 'English', defaultVoice: 'en-GB-Journey-F', defaultRate: 0.95,
       promptInstruction: 'Write the entire story in English.',
+      // Discover assembles its own <extras> block, so the fr/zh learner
+      // instructions below are repeated here minus their extras spec - two
+      // competing extras specifications in one prompt produce neither.
+      discoverInstruction: 'Write the entire piece in English.',
       narratorNote: 'Use commas for natural spoken pauses, em-dashes for dramatic pauses, and the occasional ellipsis (...) for a trailing, thoughtful pause. A few times per story, wrap one important word in *asterisks* for emphasis (e.g., "It was *impossible*") and use a rare parenthetical aside for a wry, knowing remark (e.g., "(though he would never admit it)"). When a character is small, young, or excitable, use dialogue-tag verbs like squeaked or cried; for a giant, monster, or elder, use rumbled or growled - these verbs shape how their voice sounds when read aloud. End every sentence with a full stop, exclamation mark, or question mark. Start a new paragraph for each new moment or scene shift. INVISIBLE VOICE TAGS (the reader never sees these; they only shape the narrator\'s voice): place [deep] immediately before a quotation spoken by a huge, gruff, or ancient character, and [high] immediately before a quotation spoken by a tiny, young, or squeaky one, e.g. [deep]"Who dares?" the giant rumbled. ONLY tag a quotation when a character actually speaks it aloud in the scene - never for sayings, mottos, quoted signs or letters, or reported speech like "he always said...". You may also start a paragraph with [tense], [calm], [happy], or [action] to set its mood. Use tags sparingly, only where they genuinely help.'
     },
     fr: {
       name: 'French', defaultVoice: 'fr-FR-Studio-A', defaultRate: 0.78,
+      learnerGloss: true,
+      discoverInstruction: 'Write the entire piece in French (fr-FR). All text including the title must be in French. IMPORTANT: This is for non-native French learners. Use simplified clear grammar: short sentences of max 12 words, common A2-B1 level vocabulary, avoid subjunctive, avoid complex tenses beyond passe compose and imparfait, avoid idiomatic expressions. Write so a learner can understand every sentence when read aloud slowly. Factual accuracy still takes priority: if a fact cannot be expressed at this level, choose a simpler true fact rather than a vaguer or altered one.',
       promptInstruction: 'Write the entire story in French (fr-FR). All text including the title must be in French. IMPORTANT: This is for non-native French learners. Use simplified clear grammar: short sentences of max 12 words, common A2-B1 level vocabulary, avoid subjunctive, avoid complex tenses beyond passe compose and imparfait, avoid idiomatic expressions. Write so a learner can understand every sentence when read aloud slowly. After the closing </story> tag, add an <extras> tag containing: the heading "Nouveaux mots :" followed by 4 useful words from the story, each on its own line as "word — simple English meaning", then the heading "Questions :" followed by 2 very simple comprehension questions in French, each on its own line.',
       narratorNote: 'Use commas for natural pauses, em-dashes for dramatic pauses. End every sentence clearly. New paragraph for each scene shift. INVISIBLE VOICE TAGS (never shown to the reader): place [deep] immediately before a quotation spoken by a huge or gruff character, [high] before a quotation from a tiny or young one - only for words actually spoken aloud in the scene, never for sayings or reported speech. You may start a paragraph with [tense], [calm], [happy], or [action] to set its mood. Use sparingly.'
     },
     zh: {
       name: 'Mandarin Chinese', defaultVoice: 'cmn-CN-Wavenet-A', defaultRate: 0.78,
+      learnerGloss: true,
+      discoverInstruction: 'Write the entire piece in Mandarin Chinese using Simplified Chinese characters. All text including the title must be in Chinese. IMPORTANT: This is for non-native Mandarin learners. Use simplified clear language: short sentences of max 8 characters per clause, use only common HSK 1-3 vocabulary, avoid chengyu idioms, use simple subject-verb-object structure. Write so a learner can understand every sentence when read aloud slowly. Factual accuracy still takes priority: if a fact cannot be expressed at this level, choose a simpler true fact rather than a vaguer or altered one.',
       promptInstruction: 'Write the entire story in Mandarin Chinese using Simplified Chinese characters. All text including the title must be in Chinese. IMPORTANT: This is for non-native Mandarin learners. Use simplified clear language: short sentences of max 8 characters per clause, use only common HSK 1-3 vocabulary, avoid chengyu idioms, use simple subject-verb-object structure, no complex grammar patterns. Write so a learner can understand every sentence when read aloud slowly. After the closing </story> tag, add an <extras> tag containing: the heading "生词：" followed by 4 useful words from the story, each on its own line as "word (pinyin) — simple English meaning", then the heading "问题：" followed by 2 very simple comprehension questions in Chinese, each on its own line.',
       narratorNote: 'Use Chinese commas for natural pauses. End every sentence with a Chinese period, exclamation or question mark. Start a new paragraph for each new moment or scene shift.'
     }
@@ -691,6 +722,129 @@
     }
   };
 
+  // ── DISCOVER (NON-FICTION) ────────────────────────────────────────────────
+  // Discover mode is IB-aligned non-fiction, scoped to the MYP bands by
+  // design. Ages 12-14 and 15-16 both sit inside the MYP (years 1-5), so they
+  // share one spine at different depths: subject groups supply the topics,
+  // global contexts supply the angle. Ages 3-11 are deliberately fiction-only
+  // - DISCOVER_AGES gates the toggle so those bands never reach the
+  // non-fiction chip tables.
+  var DISCOVER_AGES = { '12-14': 1, '15-16': 1 };
+  function discoverAvailable(age) { return !!DISCOVER_AGES[age]; }
+  function isDiscover() { return selectedMode === 'discover' && discoverAvailable(selectedAge); }
+
+  var SUBJECTS = {
+    '12-14': [
+      { emoji: '🌋', label: 'Ring of Fire',    text: 'How the Pacific Ring of Fire shapes the lives of people who live along it, and how geologists learned to read its warning signs' },
+      { emoji: '🏛', label: 'Great Zimbabwe',  text: 'The stone city of Great Zimbabwe, how it was built without mortar, and why colonial archaeologists spent decades refusing to believe Africans had built it' },
+      { emoji: '🧭', label: 'Wayfinding',      text: 'How Polynesian navigators crossed thousands of miles of open Pacific using stars, swells and birds, centuries before European instruments' },
+      { emoji: '📜', label: 'Cracking Codes',  text: 'How Egyptian hieroglyphs and Maya glyphs were finally deciphered, and what a writing system reveals about the people who used it' },
+      { emoji: '🕌', label: 'House of Wisdom', text: 'Baghdad\'s House of Wisdom and the scholars who preserved, translated and transformed mathematics, astronomy and medicine' },
+      { emoji: '🔢', label: 'Inventing Zero',  text: 'How zero and place-value notation arrived from India, and how the Maya invented the same idea independently on the other side of the world' },
+      { emoji: '🎨', label: 'The Great Wave',  text: 'How Japanese woodblock prints reached Europe and changed the way Western artists saw colour, line and ordinary life' },
+      { emoji: '🏗', label: 'Built to Shake',  text: 'How architects in Japan, Chile and Turkey design buildings to survive earthquakes, and what happens when the rules are ignored' },
+      { emoji: '🧊', label: 'Reading the Ice', text: 'How ice cores drilled in Antarctica and Greenland preserve a record of the atmosphere going back hundreds of thousands of years' },
+      { emoji: '💧', label: 'The Vanished Sea',text: 'How the Aral Sea was drained within a single lifetime, what it did to the people living around it, and what is being attempted now' },
+      { emoji: '🌾', label: 'Feeding Billions',text: 'The Green Revolution in India and Mexico, the scientists behind it, and the long argument over what it cost' },
+      { emoji: '🗿', label: 'Rapa Nui',        text: 'What the evidence actually shows about Easter Island, and why the familiar story of self-inflicted collapse is now seriously disputed' },
+      { emoji: '🧫', label: 'The Lucky Mould', text: 'The messy and contested story of penicillin, and the people besides Fleming who turned it into a medicine' },
+      { emoji: '🏜', label: 'Timbuktu',        text: 'The manuscript libraries of Mali, what they contain, and how families hid them from destruction' }
+    ],
+    '15-16': [
+      { emoji: '🏺', label: 'The Benin Bronzes', text: 'How the Benin Bronzes left Nigeria, where they sit now, and the genuine arguments made on each side of returning them' },
+      { emoji: '🧬', label: 'Henrietta Lacks',   text: 'The cells taken without consent that transformed modern medicine, and the ethical questions the field is still working through' },
+      { emoji: '⚛️', label: 'The Physicists',    text: 'The scientists who built the first atomic weapons, what they argued about at the time, and what they said for the rest of their lives' },
+      { emoji: '🗣', label: 'The Last Speaker',  text: 'What is lost when a language dies, why revival works in some places and fails in others, and whether the loss can be measured at all' },
+      { emoji: '🗺', label: 'Map and World',     text: 'Why every world map distorts something, what the Mercator and Peters projections each argue, and how map-making carries politics' },
+      { emoji: '🧪', label: 'When Science Fails',text: 'The replication crisis - how findings everyone believed turned out not to hold up, and how the field is trying to respond' },
+      { emoji: '🏙', label: 'The City on Paper', text: 'Brasilia, Chandigarh and the modernist promise to design a better society from nothing, and what happened to the people who actually lived there' },
+      { emoji: '🌏', label: 'Columbian Exchange',text: 'The movement of crops, animals and disease between hemispheres after 1492, and how historians weigh consequences of that scale' },
+      { emoji: '📊', label: 'What GDP Hides',    text: 'Where GDP came from, what its inventor deliberately left out, and what has been proposed to replace it' },
+      { emoji: '🌱', label: 'Naming an Epoch',   text: 'The argument among geologists over whether the Anthropocene is a real epoch and, if so, when it began' },
+      { emoji: '🕰', label: 'How We Know Dates', text: 'Radiocarbon dating, tree rings and ice layers - how the deep past is actually dated, and the uncertainty rarely mentioned alongside the numbers' },
+      { emoji: '🌊', label: 'The Last Frontier', text: 'Deep-sea mining, who has any claim to the ocean floor, and the strongest case each side makes' },
+      { emoji: '📚', label: 'Who Writes History',text: 'How one event is taught differently in different countries, and what that reveals about how history gets written' },
+      { emoji: '🧠', label: 'The Cost of Knowing',text: 'What famous neurological case studies taught science, and the ethics of how that knowledge was obtained' }
+    ]
+  };
+
+  var DISCOVER_BUILDER = {
+    focus: {
+      '12-14': ['A single object that explains a lot', 'The person who first noticed', 'A place you can still visit', 'A mistake that led somewhere', 'An everyday thing with a strange history', 'Two cultures meeting'],
+      '15-16': ['The evidence itself', 'Someone history under-credited', 'A decision made under pressure', 'An idea that outlived its proof', 'The archive and what it leaves out', 'A case still open']
+    },
+    // "Different cultures and continents" as an explicit control, plus a
+    // rotation nudge in the prompt (see getAvoidClause) - left alone, models
+    // default to Rome, Egypt and the Tudors on repeat.
+    regions: {
+      '12-14': ['West Africa', 'East Asia', 'South Asia', 'The Andes and Amazon', 'The Arctic and its peoples', 'Polynesia and the Pacific', 'The Middle East', 'Mesoamerica', 'Central Asia', 'Southern Africa', 'Australia and its First Nations', 'Northern Europe'],
+      '15-16': ['West Africa', 'East Asia', 'South Asia', 'The Andes and Amazon', 'The Arctic and its peoples', 'The Pacific Islands', 'The Middle East and North Africa', 'Mesoamerica', 'Central Asia', 'Southeast Asia', 'The Caribbean', 'Migration and diaspora', 'Al-Andalus and the Mediterranean', 'The Balkans and Eastern Europe']
+    },
+    // 12-14 uses the six MYP global contexts verbatim; 15-16 shifts to the
+    // theory-of-knowledge framing that leads into the Diploma Programme.
+    angles: {
+      '12-14': ['Identities and relationships', 'Orientation in space and time', 'Personal and cultural expression', 'Scientific and technical innovation', 'Globalization and sustainability', 'Fairness and development'],
+      '15-16': ['How do we actually know this?', 'Who did the work, and who got the credit?', 'The evidence is genuinely contested', 'What the surviving sources leave out', 'An accepted idea that turned out wrong', 'The ethics were argued at the time', 'The same event told two ways']
+    },
+    takeaways: {
+      '12-14': ['A question worth arguing about', 'Two views that both hold up', 'A link to something they already know', 'Why it still matters today', 'What we genuinely do not know yet', 'How someone worked it out'],
+      '15-16': ['An unresolved debate, fairly put', 'A reason to distrust the tidy version', 'The strongest case on each side', 'What changed when new evidence arrived', 'A question experts still split on', 'Why the accepted story is incomplete']
+    }
+  };
+
+  // Narrative non-fiction voices - the fiction STYLES list actively pushes the
+  // model toward invention, which is the opposite of what Discover needs.
+  var NF_STYLES = {
+    en: {
+      '12-14': [
+        { emoji: '🌍', label: 'Attenborough',    author: 'David Attenborough',   text: 'Warm and awe-filled like David Attenborough - patient build-up to a moment of wonder, precise observation, and deep respect for the subject' },
+        { emoji: '🚶', label: 'Bill Bryson',     author: 'Bill Bryson',          text: 'Curious and funny like Bill Bryson - digressions that turn out to matter, delight in odd details, and complicated things made suddenly obvious' },
+        { emoji: '🏛', label: 'Mary Beard',      author: 'Mary Beard',           text: 'Sharp and companionable like Mary Beard - the past treated as genuinely uncertain, evidence weighed in the open, and a refusal to tidy things up' },
+        { emoji: '🔢', label: 'Hannah Fry',      author: 'Hannah Fry',           text: 'Bright and clear like Hannah Fry - a number or pattern at the centre, everyday examples, and real delight in how it works' },
+        { emoji: '🧫', label: 'Mary Roach',      author: 'Mary Roach',           text: 'Irreverent and vivid like Mary Roach - the strange human details other writers leave out, told with affection and a straight face' },
+        { emoji: '🌌', label: 'Carl Sagan',      author: 'Carl Sagan',           text: 'Lyrical and expansive like Carl Sagan - scale handled with care, wonder without exaggeration, and prose that slows down at exactly the right moment' },
+        { emoji: '💀', label: 'Horrible Histories', author: 'Terry Deary',       text: 'Gleefully grim like Horrible Histories - the gross and startling bits pushed to the front, jokes throughout, but the facts kept scrupulously straight' },
+        { emoji: '🗺', label: 'Macfarlane',      author: 'Robert Macfarlane',    text: 'Rooted and lyrical like Robert Macfarlane - landscape, language and history braided together, with close attention to words themselves' }
+      ],
+      '15-16': [
+        { emoji: '🏛', label: 'Mary Beard',      author: 'Mary Beard',           text: 'Sharp and sceptical like Mary Beard - sources interrogated rather than summarised, confident about what is known and equally clear about what is not' },
+        { emoji: '📖', label: 'Harari',          author: 'Yuval Noah Harari',    text: 'Sweeping and provocative like Yuval Noah Harari - long arcs of history, unsettling reframings, and arguments stated clearly enough that a reader could disagree with them' },
+        { emoji: '🔬', label: 'Ed Yong',         author: 'Ed Yong',              text: 'Precise and humane like Ed Yong - science reported with real rigour, scientists written as people, and uncertainty stated plainly rather than smoothed over' },
+        { emoji: '🧠', label: 'Mukherjee',       author: 'Siddhartha Mukherjee', text: 'Elegant and clinical like Siddhartha Mukherjee - the history of an idea traced through the people it was tested on, moral weight carried without preaching' },
+        { emoji: '🌏', label: 'Amitav Ghosh',    author: 'Amitav Ghosh',         text: 'Searching and global like Amitav Ghosh - empire, climate and culture connected across continents, written deliberately from outside the Western default' },
+        { emoji: '📉', label: 'Tim Harford',     author: 'Tim Harford',          text: 'Playful and rigorous like Tim Harford - a puzzle set up, the evidence weighed honestly, and a comfortable assumption dismantled by the end' },
+        { emoji: '🗿', label: 'Winchester',      author: 'Simon Winchester',     text: 'Absorbing and detailed like Simon Winchester - one obsessive thread followed patiently until it opens onto something far larger' },
+        { emoji: '🌌', label: 'Carl Sagan',      author: 'Carl Sagan',           text: 'Lyrical and expansive like Carl Sagan - cosmic scale made comprehensible, wonder earned rather than asserted' }
+      ]
+    },
+    fr: {
+      '12-14': [
+        { emoji: '🌌', label: 'Hubert Reeves',   author: 'Hubert Reeves',        text: 'Poetique et clair comme Hubert Reeves - des idees scientifiques expliquees avec douceur et emerveillement, des phrases simples et belles' },
+        { emoji: '🗺', label: 'Dessous des cartes', author: 'Jean-Christophe Victor', text: 'Methodique et curieux comme Le Dessous des cartes - une question de geographie posee clairement, puis expliquee couche par couche' },
+        { emoji: '⏳', label: 'Fernand Braudel', author: 'Fernand Braudel',      text: 'Ample et patient comme Braudel - le temps long, la geographie qui faconne les societes, et le quotidien pris au serieux' },
+        { emoji: '🔬', label: 'Etienne Klein',   author: 'Etienne Klein',        text: 'Precis et philosophique comme Etienne Klein - une idee scientifique examinee avec rigueur, et les questions qu elle laisse ouvertes' }
+      ],
+      '15-16': [
+        { emoji: '⏳', label: 'Fernand Braudel', author: 'Fernand Braudel',      text: 'Ample et structurel comme Braudel - le temps long, les forces profondes derriere les evenements, et une analyse qui refuse le recit facile' },
+        { emoji: '🔬', label: 'Etienne Klein',   author: 'Etienne Klein',        text: 'Rigoureux et interrogatif comme Etienne Klein - ce que la science sait, ce qu elle croit savoir, et la difference entre les deux' },
+        { emoji: '🌌', label: 'Hubert Reeves',   author: 'Hubert Reeves',        text: 'Lyrique et lucide comme Hubert Reeves - l echelle cosmique rendue comprehensible, et une inquietude ecologique sincere' },
+        { emoji: '📚', label: 'Marc Bloch',      author: 'Marc Bloch',           text: 'Exigeant et humain comme Marc Bloch - le metier d historien explique, les sources questionnees, et le refus des certitudes commodes' }
+      ]
+    },
+    zh: {
+      '12-14': [
+        { emoji: '🔭', label: 'Shiwange Weishenme', author: 'Shiwange Weishenme', text: 'Clear and patient like the classic Chinese science series 十万个为什么 - a real question asked plainly, then answered step by step with everyday examples' },
+        { emoji: '🏯', label: 'Yi Zhongtian',    author: 'Yi Zhongtian',         text: 'Lively and conversational like Yi Zhongtian - history told as a gripping human story, with clear judgements and vivid characterisation' },
+        { emoji: '🌌', label: 'Bian Yulin',      author: 'Bian Yulin',           text: 'Warm and precise like Bian Yulin astronomy writing - vast scales made graspable, and genuine delight in how discoveries were made' }
+      ],
+      '15-16': [
+        { emoji: '🏯', label: 'Yi Zhongtian',    author: 'Yi Zhongtian',         text: 'Incisive and opinionated like Yi Zhongtian - history argued rather than recited, with the reader trusted to weigh the case' },
+        { emoji: '⚙️', label: 'Needham',         author: 'Joseph Needham',       text: 'Systematic and comparative like Joseph Needham - Chinese science and technology set carefully against the rest of the world, evidence marshalled patiently' },
+        { emoji: '🌌', label: 'Liu Cixin',       author: 'Liu Cixin',            text: 'Expansive and rigorous in the manner of Liu Cixin writing non-fiction - real science at cosmic scale, and the philosophical weight of what it implies' }
+      ]
+    }
+  };
+
   // ── HELPERS ───────────────────────────────────────────────────────────────
   function shuffle(arr) {
     var a = arr.slice(), i, j, t;
@@ -722,6 +876,17 @@
       '15-16':'Write for readers aged 15-16. Mature literary voice, layered themes, moral ambiguity, unreliable or introspective narration where appropriate. Treat the reader as an intelligent adult. The story should feel like literary short fiction — not a children\'s story. Avoid tidy resolutions; embrace complexity, restraint, and emotional truth. IMPORTANT: Avoid overused names — do NOT use Marcus, Maya, or Ms. Chen. Choose fresh, distinctive character names. Vary your story titles — avoid phrases like "The Weight of" or similar heavy abstractions.'
     };
     return map[age] || '';
+  }
+
+  // Ages 12-14 and 15-16 are both MYP, so both get subject-group and global-
+  // context framing; 15-16 pushes further into how knowledge is justified,
+  // which is the on-ramp to the Diploma Programme's theory of knowledge.
+  function getDiscoverAgeInstructions(age) {
+    var map = {
+      '12-14': 'Write for readers aged 12-14, following the IB Middle Years Programme. Treat the topic as an enquiry, not a summary: open with something concrete - an object, a person, a place - and let the bigger idea emerge from it. Connect the topic explicitly to its MYP subject group (Individuals and societies, Sciences, Mathematics, Arts, Design, or Language acquisition) and to the global context given in the enquiry details, without ever naming those labels in the text itself. Define technical vocabulary in-line the first time it appears. Assume real curiosity and no prior knowledge.',
+      '15-16': 'Write for readers aged 15-16, at the top of the IB Middle Years Programme and heading toward the Diploma Programme. Treat the reader as capable of holding two competing accounts at once. Do not resolve genuine disagreement artificially: set out the strongest version of each position and be explicit about what evidence would settle it. Where a claim rests on a particular kind of evidence - an excavation, a dataset, a single surviving source - say so, and say what that evidence cannot show. Avoid moralising; trust the reader to draw conclusions.'
+    };
+    return map[age] || map['12-14'];
   }
 
   // ── VOICE & SPEED ─────────────────────────────────────────────────────────
@@ -791,15 +956,69 @@
     el.classList.add('selected');
     selectedAge   = el.dataset.age;
     selectedStyle = null;
+    // Discover is only written for the MYP bands; anywhere else, fall back to
+    // fiction so the rest of the flow can never key into empty chip lists.
+    if (!discoverAvailable(selectedAge)) selectedMode = 'story';
+    syncModeUI();
+    applyModeLabels();
     renderThemes();
     renderBuilder();
     renderStyles();
-    ['languageCard','themeCard','storyBuilderCard','styleCard','lengthCard','generateBtn'].forEach(function(id) {
+    ['modeCard','languageCard','themeCard','storyBuilderCard','styleCard','lengthCard','generateBtn'].forEach(function(id) {
       var e = document.getElementById(id);
       if (e) e.style.display = 'block';
     });
+    var modeCard = document.getElementById('modeCard');
+    if (modeCard) modeCard.style.display = discoverAvailable(selectedAge) ? 'block' : 'none';
     document.getElementById('themeInput').value = '';
     document.querySelectorAll('.style-card').forEach(function(c) { c.classList.remove('selected'); });
+  }
+
+  // ── MODE SELECTION (Story / Discover) ─────────────────────────────────────
+  function selectMode(el) {
+    document.querySelectorAll('.mode-pill').forEach(function(p) { p.classList.remove('selected'); });
+    el.classList.add('selected');
+    selectedMode  = el.dataset.mode;
+    selectedStyle = null;
+    applyModeLabels();
+    renderThemes();
+    renderBuilder();
+    renderStyles();
+    document.getElementById('themeInput').value = '';
+    document.querySelectorAll('.style-card').forEach(function(c) { c.classList.remove('selected'); });
+  }
+
+  function syncModeUI() {
+    document.querySelectorAll('.mode-pill').forEach(function(p) {
+      p.classList.toggle('selected', p.dataset.mode === selectedMode);
+    });
+  }
+
+  // Every user-facing label that assumes fiction gets swapped here, so the
+  // builder never asks for a "twist" or "how does it end" on a factual piece.
+  function applyModeLabels() {
+    var d = isDiscover();
+    var set = function(id, txt) { var e = document.getElementById(id); if (e) e.textContent = txt; };
+    var ph  = function(id, txt) { var e = document.getElementById(id); if (e) e.placeholder = txt; };
+
+    set('themeCardIcon',   d ? '🔭' : '✨');
+    set('themeCardTitle',  d ? 'What do you want to learn about?' : 'What\'s the story about?');
+    ph ('themeInput',      d ? 'e.g. How the Sahara was once green and full of rivers...' : 'e.g. A little dragon who learns to share...');
+    set('builderCardTitle',d ? 'Shape your discovery' : 'Shape your story');
+    set('characterLabel',  d ? '🔍 Subject focus'          : '🧒 Main character');
+    set('settingLabel',    d ? '🗺️ Region & culture'       : '🌍 Setting');
+    set('twistLabel',      d ? '🧭 Angle'                  : '⚡ Story twist');
+    set('endingLabel',     d ? '💬 What it leaves you with': '💫 How does it end?');
+    ph ('characterInput',  d ? 'Or name your own focus…'   : 'Or describe your own character…');
+    ph ('settingInput',    d ? 'Or name a region or culture…' : 'Or describe your own setting…');
+    ph ('twistInput',      d ? 'Or set your own angle…'    : 'Or add your own twist…');
+    set('styleCardTitle',  d ? 'Choose a narrator\'s voice' : 'Choose a writing style');
+    set('lengthCardTitle', d ? 'How long should it be?'     : 'How long should the story be?');
+
+    var btn = document.getElementById('generateBtn');
+    if (btn) btn.textContent = d ? '🔭 Create My Discovery' : '🌙 Create My Story';
+    var note = document.getElementById('discoverNote');
+    if (note) note.style.display = d ? 'block' : 'none';
   }
 
   // ── LANGUAGE SELECTION ────────────────────────────────────────────────────
@@ -821,7 +1040,8 @@
     var container = document.getElementById('themeSuggestions');
     if (!container) return;
     container.innerHTML = '';
-    shuffle(THEMES[selectedAge] || []).slice(0, 6).forEach(function(t) {
+    var topics = isDiscover() ? (SUBJECTS[selectedAge] || []) : (THEMES[selectedAge] || []);
+    shuffle(topics).slice(0, 6).forEach(function(t) {
       var chip = document.createElement('div');
       chip.className = 'suggestion-chip';
       chip.textContent = t.emoji + ' ' + t.label;
@@ -849,13 +1069,17 @@
   }
   function renderBuilder() {
     builderSelections = { character: '', setting: '', twist: '', ending: '' };
-    var hasChar     = themeHasCharacter();
+    var d = isDiscover();
+    // The four slots keep their internal keys across both modes - only the
+    // chip data and the visible labels change - so the DOM ids, selection
+    // state and prompt assembly all stay shared.
+    var hasChar     = !d && themeHasCharacter();
     var charSection = document.getElementById('characterSection');
     if (charSection) charSection.style.display = hasChar ? 'none' : '';
-    if (!hasChar) renderBuilderSection('characterChips', 'characters', 'character', 'characterInput');
-    renderBuilderSection('settingChips', 'settings', 'setting', 'settingInput');
-    renderBuilderSection('twistChips',   'twists',   'twist',   'twistInput');
-    renderBuilderSection('endingChips',  'endings',  'ending',  null);
+    if (!hasChar) renderBuilderSection('characterChips', d ? 'focus'      : 'characters', 'character', 'characterInput');
+    renderBuilderSection('settingChips', d ? 'regions'   : 'settings', 'setting', 'settingInput');
+    renderBuilderSection('twistChips',   d ? 'angles'    : 'twists',   'twist',   'twistInput');
+    renderBuilderSection('endingChips',  d ? 'takeaways' : 'endings',  'ending',  null);
   }
   function renderBuilderSection(containerId, dataKey, selectionKey, inputId) {
     var container = document.getElementById(containerId);
@@ -865,7 +1089,8 @@
     // data gap degrades to slightly-off suggestions instead of no chips at
     // all (age 15-16 shipped with no BUILDER entries and showed only the
     // bare Shuffle button until its lists were added).
-    var chipData = (BUILDER[dataKey] || {})[selectedAge] || (BUILDER[dataKey] || {})['12-14'] || [];
+    var table    = isDiscover() ? DISCOVER_BUILDER : BUILDER;
+    var chipData = (table[dataKey] || {})[selectedAge] || (table[dataKey] || {})['12-14'] || [];
     shuffle(chipData).slice(0, 5).forEach(function(itemLabel) {
       var chip = document.createElement('div');
       chip.className = 'builder-chip';
@@ -900,6 +1125,13 @@
       if (el && el.value.trim()) builderSelections[key] = el.value.trim();
     });
     var parts = [];
+    if (isDiscover()) {
+      if (builderSelections.character) parts.push('Focus: '                    + builderSelections.character);
+      if (builderSelections.setting)   parts.push('Region or culture: '        + builderSelections.setting);
+      if (builderSelections.twist)     parts.push('Angle (MYP global context or line of enquiry): ' + builderSelections.twist);
+      if (builderSelections.ending)    parts.push('What the reader should be left with: ' + builderSelections.ending);
+      return parts.length ? '\n\nENQUIRY DETAILS:\n' + parts.join('\n') : '';
+    }
     if (builderSelections.character) parts.push('Main character: ' + builderSelections.character);
     if (builderSelections.setting)   parts.push('Setting: '        + builderSelections.setting);
     if (builderSelections.twist)     parts.push('Twist: '          + builderSelections.twist);
@@ -912,7 +1144,10 @@
     var grid = document.getElementById('styleGrid');
     if (!grid) return;
     grid.innerHTML = '';
-    var ageStyles = ((STYLES[selectedLang] || STYLES.en)[selectedAge]) || [];
+    var table     = isDiscover() ? NF_STYLES : STYLES;
+    var ageStyles = ((table[selectedLang] || table.en)[selectedAge])
+                 || (table.en[selectedAge])
+                 || [];
     ageStyles.forEach(function(s) {
       var card = document.createElement('div');
       card.className = 'style-card';
@@ -952,22 +1187,33 @@
       .slice(0, 3);
   }
 
-  function recordRecentStory(title, text) {
+  function recordRecentStory(title, text, region, mode) {
     var recent = loadRecent();
-    recent.unshift({ title: title || '', names: extractCharacterNames(text || '') });
+    var entry  = { title: title || '', names: extractCharacterNames(text || '') };
+    // Discover entries also remember which region they covered, so the next
+    // prompt can steer away from it - otherwise the model reliably returns to
+    // the same handful of European and Mediterranean topics.
+    if (mode === 'discover') { entry.mode = 'discover'; if (region) entry.region = region; }
+    recent.unshift(entry);
     if (recent.length > 12) recent.length = 12;
     try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch(e) { /* best-effort */ }
   }
 
-  function getAvoidClause() {
+  function getAvoidClause(discover) {
     var recent = loadRecent();
     if (!recent.length) return '';
-    var titles = [], names = [];
+    var titles = [], names = [], regions = [];
     recent.forEach(function(r) {
       if (r.title) titles.push(r.title);
       (r.names || []).forEach(function(n) { if (names.indexOf(n) === -1) names.push(n); });
+      if (r.mode === 'discover' && r.region && regions.indexOf(r.region) === -1) regions.push(r.region);
     });
     var parts = [];
+    if (discover) {
+      if (titles.length)  parts.push('Recently covered (choose a clearly different topic): ' + titles.slice(0, 10).join('; '));
+      if (regions.length) parts.push('Regions already covered recently - pick somewhere else unless the chosen topic requires otherwise: ' + regions.slice(0, 8).join(', '));
+      return parts.length ? '\n- COVERAGE: ' + parts.join('. ') + '.' : '';
+    }
     if (titles.length) parts.push('Recent titles (avoid similar titles AND similar central ideas): ' + titles.slice(0, 10).join('; '));
     if (names.length)  parts.push('Recently used character names (choose different ones): ' + names.slice(0, 15).join(', '));
     return parts.length ? '\n- FRESHNESS: This child has heard these stories before. ' + parts.join('. ') + '.' : '';
@@ -987,6 +1233,50 @@
     try { if (t && localStorage.getItem(PREMIUM_KEY) === '1') t.checked = true; } catch(e) {}
   }
 
+  // ── DISCOVER PROMPT ───────────────────────────────────────────────────────
+  // Non-fiction reads as more authoritative than fiction, so a confident wrong
+  // date lands harder than a dull one. The accuracy rules below are stated as
+  // overriding constraints rather than style preferences, and the "Still
+  // debated" extras section exists so genuine disagreement is shown as
+  // disagreement instead of being silently resolved in the narrative.
+  function buildDiscoverPrompt(theme, builderExtra, cfg, targetWords) {
+    var glossNote = cfg.learnerGloss
+      ? ' Because the reader is a language learner, give each key term followed by a simple English meaning.'
+      : '';
+    return 'You are a superb writer of narrative non-fiction for young readers. Everything you write here is TRUE.\n\n'
+      + (cfg.discoverInstruction || cfg.promptInstruction) + '\n\n'
+      + 'TOPIC: ' + theme + builderExtra + '\n\n'
+      + 'NARRATIVE VOICE: ' + selectedStyle.author + ' - ' + selectedStyle.text + '\n'
+      + getDiscoverAgeInstructions(selectedAge) + '\n'
+      + 'TARGET LENGTH: Approximately ' + targetWords + ' words.\n\n'
+      + 'ACCURACY RULES - these override every other instruction, including style:\n'
+      + '- Include only facts you are confident are well established. If you are not confident, leave it out.\n'
+      + '- NEVER invent dates, statistics, measurements, names or events. No invented composite characters.\n'
+      + '- Do not fabricate quotations. Quote only words genuinely on record; otherwise paraphrase and attribute plainly.\n'
+      + '- Prefer honest imprecision to false precision: write "around 1500", "roughly a third", "within a few decades" rather than inventing an exact figure.\n'
+      + '- Where specialists genuinely disagree, say so inside the text ("historians still argue about...") instead of picking one account and presenting it as settled.\n'
+      + '- Name the people who did the work, including those who were overlooked or uncredited at the time.\n'
+      + '- Describe other cultures on their own terms and from their own perspective where sources allow. No exoticising, and no framing non-European achievement as surprising.\n\n'
+      + 'HOW TO WRITE IT:\n'
+      + '- Open on something concrete - an object, a person, a place, a moment - and let the larger idea grow out of it.\n'
+      + '- Keep real narrative momentum. This should be as gripping as a story, while remaining entirely factual.\n'
+      + '- Explain every technical term in-line the first time it appears, without breaking the flow.\n'
+      + '- Give the reader something to argue with: at least one point where reasonable people reach different conclusions, with the strongest case for each.\n'
+      + '- End on the open question rather than a tidy moral.\n\n'
+      + 'FORMAT YOUR RESPONSE EXACTLY LIKE THIS:\n'
+      + '<title>[Title]</title>\n<story>\n[Full piece]\n</story>\n<extras>\n'
+      + 'Key terms:\n[4 terms from the piece, each on its own line as "term - plain meaning"]\n\n'
+      + 'Still debated:\n[2-3 points where experts genuinely disagree, each on its own line, stating both positions rather than a verdict]\n\n'
+      + 'Worth arguing about:\n[2 open questions with no settled answer, each on its own line]\n</extras>\n\n'
+      + 'Rules:\n'
+      + '- No chapter numbers, headers or bullet points inside <story>. Flowing paragraphs separated by a blank line.\n'
+      + '- No word count or meta-commentary.\n'
+      + '- Everything in <extras> must be factual too, and must not repeat the wording of the piece.' + glossNote + '\n'
+      + '- TITLE: concrete and intriguing. Never start with "The Weight of".\n'
+      + '- NARRATION: ' + cfg.narratorNote
+      + getAvoidClause(true);
+  }
+
   // ── GENERATE STORY ────────────────────────────────────────────────────────
   function generateStory() {
     var theme   = document.getElementById('themeInput').value.trim();
@@ -998,19 +1288,23 @@
     voices.forEach(function(v) { if (v.id === voiceId) voice = v; });
     if (!voice) voice = voices[0];
 
-    if (!selectedAge)   { showError('Please select an age group.');     return; }
-    if (!theme)         { showError('Please describe the story theme.'); return; }
-    if (!selectedStyle) { showError('Please choose a writing style.');   return; }
+    var discover = isDiscover();
+
+    if (!selectedAge)   { showError('Please select an age group.'); return; }
+    if (!theme)         { showError(discover ? 'Please describe what you want to learn about.' : 'Please describe the story theme.'); return; }
+    if (!selectedStyle) { showError(discover ? 'Please choose a narrator\'s voice.' : 'Please choose a writing style.'); return; }
 
     var targetWords  = parseInt(minutes) * 130;
     var builderExtra = getBuilderPrompt();
 
     document.getElementById('setupSection').style.display = 'none';
     document.getElementById('loadingCard').classList.add('visible');
-    document.getElementById('loadingText').textContent = 'Starting your story...';
+    document.getElementById('loadingText').textContent = discover ? 'Researching your topic...' : 'Starting your story...';
     document.getElementById('loadingSub').textContent  = 'Words will appear in just a moment';
 
-    var prompt = 'You are a master children\'s storyteller.\n\n'
+    var prompt = discover
+      ? buildDiscoverPrompt(theme, builderExtra, cfg, targetWords)
+      : 'You are a master children\'s storyteller.\n\n'
       + cfg.promptInstruction + '\n\n'
       + 'THEME: ' + theme + builderExtra + '\n\n'
       + 'WRITING STYLE: ' + selectedStyle.author + ' - ' + selectedStyle.text + '\n'
@@ -1025,7 +1319,7 @@
       + '- CHARACTER NAMES: Be creative and varied. NEVER use the names Marcus, Maya, or Ms. Chen. Choose fresh, distinctive names suited to the story world.\n'
       + '- STORY TITLE: Be inventive. NEVER start with "The Weight of". Avoid heavy abstract nouns as title openers. Titles can be playful, concrete, intriguing, or surprising.\n'
       + '- NARRATION: ' + cfg.narratorNote
-      + getAvoidClause();
+      + getAvoidClause(false);
 
     // Budget enough output tokens for the requested length, not just a flat
     // cap: at 15 minutes (~1950 target words) a 4096 cap was routinely hit
@@ -1038,7 +1332,9 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: isPremiumStory() ? 'claude-sonnet-5' : 'claude-haiku-4-5-20251001',
+        // Discover always uses the stronger model: factual accuracy matters
+        // more here than latency, and the fast model invents more freely.
+        model: (isPremiumStory() || discover) ? 'claude-sonnet-5' : 'claude-haiku-4-5-20251001',
         max_tokens: maxTokens,
         stream: true,
         messages: [{ role: 'user', content: prompt }]
@@ -1088,7 +1384,7 @@
             if (stopReason === 'max_tokens' && !/<\/story>/.test(rawText)) {
               throw new Error('The story ran out of room before it finished. Try a shorter length or regenerate.');
             }
-            finaliseStream(rawText, voice, cfg, minutes);
+            finaliseStream(rawText, voice, cfg, minutes, discover);
             return;
           }
           buffer += decoder.decode(result.value, { stream: true });
@@ -1205,15 +1501,16 @@
     }
   }
 
-  function finaliseStream(rawText, voice, cfg, minutes) {
+  function finaliseStream(rawText, voice, cfg, minutes, discover) {
     var storyTitle = '';
     var tm = rawText.match(/<title>([\s\S]*?)<\/title>/);
     if (tm) {
       storyTitle = tm[1].trim();
       document.getElementById('storyTitle').textContent = storyTitle;
     }
-    // Learner extras (French/Mandarin glossary + questions) - displayed under
-    // the story but excluded from narration, which only reads <story> content
+    // Extras: French/Mandarin learner glossary, or the Discover key terms /
+    // still-debated / worth-arguing-about block. Displayed under the piece but
+    // excluded from narration, which only reads <story> content.
     var xm = rawText.match(/<extras>([\s\S]*?)<\/extras>/);
     storyExtrasText = xm ? xm[1].trim() : '';
 
@@ -1231,20 +1528,21 @@
         storyText = legacyIdx !== -1 ? rawText.slice(legacyIdx + 6).replace(/^\s*\n/, '').trim() : rawText.trim();
       }
     }
-    finishStory(storyTitle, storyText, voice, cfg, minutes);
+    finishStory(storyTitle, storyText, voice, cfg, minutes, discover);
   }
 
-  function finishStory(storyTitle, storyText, voice, cfg, minutes) {
+  function finishStory(storyTitle, storyText, voice, cfg, minutes, discover) {
     fullStoryText = storyText.trim();
     if (!fullStoryText) { showError('No story content received. Please try again.'); return; }
-    recordRecentStory(storyTitle, fullStoryText);
+    recordRecentStory(storyTitle, fullStoryText, builderSelections.setting, discover ? 'discover' : 'story');
     renderStoryText(fullStoryText);
     renderStoryExtras(storyExtrasText);
     document.getElementById('storyMeta').innerHTML =
       '<span class="meta-tag">Age ' + selectedAge + '</span>' +
       '<span class="meta-tag">' + minutes + ' min</span>' +
       '<span class="meta-tag">' + cfg.name + '</span>' +
-      '<span class="meta-tag">Style of ' + selectedStyle.author + '</span>';
+      (discover ? '<span class="meta-tag">🔭 Discover · non-fiction</span>' : '') +
+      '<span class="meta-tag">' + (discover ? 'Voice of ' : 'Style of ') + selectedStyle.author + '</span>';
     // Store voice info and auto-start narration
     pendingNarrationVoice = voice;
     pendingNarrationTitle = storyTitle || '';
@@ -2454,7 +2752,8 @@
     return s + '…';
   }
 
-  function getStoryEmoji(style, lang) {
+  function getStoryEmoji(style, lang, mode) {
+    if (mode === 'discover') return '🔭';
     if (lang === 'zh') return '🐉';
     var emojis = { 'Milne': '🐻', 'Dahl': '🍫', 'Tolkien': '🧙', 'Andersen': '❄️',
                    'Grimm': '🏰', 'Seuss': '🎩', 'Potter': '🦔', 'Kipling': '🐯',
@@ -2482,6 +2781,7 @@
       extras:   storyExtrasText || '',
       lang:     selectedLang,
       age:      selectedAge,
+      mode:     isDiscover() ? 'discover' : 'story',
       style:    selectedStyle,
       voiceId:  document.getElementById('liveVoiceSelect').value,
       savedAt:  new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
@@ -2520,8 +2820,8 @@
       return;
     }
     container.innerHTML = usageBar + lib.map(function(s) {
-      var emoji = getStoryEmoji(s.style, s.lang);
-      var meta  = [s.savedAt, s.age ? 'Age ' + s.age : '', s.style ? s.style.author : ''].filter(Boolean).join(' · ');
+      var emoji = getStoryEmoji(s.style, s.lang, s.mode);
+      var meta  = [s.savedAt, s.age ? 'Age ' + s.age : '', s.mode === 'discover' ? 'Discover' : '', s.style ? s.style.author : ''].filter(Boolean).join(' · ');
       return '<div class="story-item" onclick="openSavedStory(' + s.id + ')">'
         + '<div class="story-item-icon">' + emoji + '</div>'
         + '<div class="story-item-body">'
@@ -2547,6 +2847,7 @@
     // Restore state
     selectedLang  = story.lang  || 'en';
     selectedAge   = story.age   || 5;
+    selectedMode  = story.mode  || 'story';
     selectedStyle = story.style || null;
 
     // Switch to story card view
@@ -2562,8 +2863,9 @@
     renderStoryExtras(storyExtrasText);
     document.getElementById('storyMeta').innerHTML =
       (story.age   ? '<span class="meta-tag">Age ' + story.age + '</span>' : '') +
-      (story.style ? '<span class="meta-tag">Style of ' + story.style.author + '</span>' : '') +
-      '<span class="meta-tag">Saved story</span>';
+      (story.mode === 'discover' ? '<span class="meta-tag">🔭 Discover · non-fiction</span>' : '') +
+      (story.style ? '<span class="meta-tag">' + (story.mode === 'discover' ? 'Voice of ' : 'Style of ') + story.style.author + '</span>' : '') +
+      '<span class="meta-tag">' + (story.mode === 'discover' ? 'Saved' : 'Saved story') + '</span>';
     document.getElementById('storyCard').classList.add('visible');
 
     // Reset save button (already saved)
