@@ -1321,20 +1321,33 @@
       + '- NARRATION: ' + cfg.narratorNote
       + getAvoidClause(false);
 
-    // Budget enough output tokens for the requested length, not just a flat
-    // cap: at 15 minutes (~1950 target words) a 4096 cap was routinely hit
-    // before the story (and its closing </story> tag) finished streaming,
-    // since models commonly overshoot the target word count and still need
-    // room for the title/extras/voice tags on top of the story body.
-    var maxTokens = Math.min(16000, Math.max(4096, Math.round(targetWords * 2.5 + 1000)));
+    // Discover always uses the stronger model: factual accuracy matters more
+    // here than latency, and the fast model invents more freely. maxOut is
+    // each model's real output ceiling.
+    var model = (isPremiumStory() || discover)
+      ? { id: 'claude-sonnet-5',            maxOut: 128000 }
+      : { id: 'claude-haiku-4-5-20251001',  maxOut: 64000  };
+
+    // Budget generously. max_tokens is a cap, not a reservation - billing is
+    // on tokens actually generated - so unused headroom costs nothing, and
+    // the request streams, which is what makes a large cap safe from request
+    // timeouts. Three things all draw on this one budget and the old
+    // targetWords * 2.5 + 1000 left room for none of them:
+    //   - models overshoot the target word count, often by a lot;
+    //   - Discover appends the <extras> block after the story;
+    //   - claude-sonnet-5 runs adaptive thinking whenever `thinking` is
+    //     omitted, and thinking tokens count against max_tokens alongside the
+    //     response text. That is what cut off a 10-minute Discover piece: the
+    //     ~4k budget was largely spent thinking before the story was written.
+    // Its tokenizer also yields more tokens per word than the old estimate
+    // assumed, so the multiplier is per-word generous rather than tuned.
+    var maxTokens = Math.min(model.maxOut, Math.max(8192, Math.round(targetWords * 6 + 4000)));
 
     fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        // Discover always uses the stronger model: factual accuracy matters
-        // more here than latency, and the fast model invents more freely.
-        model: (isPremiumStory() || discover) ? 'claude-sonnet-5' : 'claude-haiku-4-5-20251001',
+        model: model.id,
         max_tokens: maxTokens,
         stream: true,
         messages: [{ role: 'user', content: prompt }]
@@ -2019,6 +2032,28 @@
     // where the chunk split happens to fall.
     var PARAGRAPH_GAP_MS = 1500;
 
+    // Google TTS rejects any single request whose input exceeds ~5000 bytes,
+    // and SSML markup counts toward that. One request per paragraph is
+    // normally far below the limit, but nothing stops a model from emitting
+    // one very long unbroken paragraph, and that section would fail to
+    // synthesize. Split oversized paragraphs at sentence boundaries so an
+    // outlier costs an extra request instead of a missing section. The pieces
+    // keep their paragraph's index, exactly as cast segments do, so
+    // read-along highlighting is unaffected. The budget is deliberately well
+    // under the limit to leave room for markup expansion.
+    var TTS_PIECE_CHARS = 1200;
+    function splitLongParagraph(p) {
+      if (p.length <= TTS_PIECE_CHARS) return [p];
+      var sentences = p.match(/[^.!?。！？]+[.!?。！？]*\s*/g) || [p];
+      var pieces = [], cur = '';
+      sentences.forEach(function(s) {
+        if (cur && (cur + s).length > TTS_PIECE_CHARS) { pieces.push(cur.trim()); cur = s; }
+        else cur += s;
+      });
+      if (cur.trim()) pieces.push(cur.trim());
+      return pieces.length ? pieces : [p];
+    }
+
     // Builds one merged SSML chunk from a group of paragraphs
     // Each paragraph gets its own mood-adjusted prosody wrapper. No trailing
     // break: Google trims trailing silence, so the boundary pause is stitched
@@ -2158,16 +2193,18 @@
       paraCount = paras.length;
       paras.forEach(function(p, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: 1300 });
-        var segs = castVoice ? splitCastSegments(p.trim()) : [{ text: p.trim(), cast: false }];
-        segs.forEach(function(seg) {
-          if (!seg.text.trim()) return;
-          var c = buildJourneyChunk(seg.text.trim());
-          // A segment can be only tags (e.g. "[tense]" before a cast quote)
-          // and end up empty once processed - never send an empty request
-          if (!c.value.trim()) return;
-          if (seg.cast) c.voice = castVoice;
-          c.para = i; // paragraph index, for read-along highlighting timings
-          chunks.push(c);
+        splitLongParagraph(p.trim()).forEach(function(piece) {
+          var segs = castVoice ? splitCastSegments(piece) : [{ text: piece, cast: false }];
+          segs.forEach(function(seg) {
+            if (!seg.text.trim()) return;
+            var c = buildJourneyChunk(seg.text.trim());
+            // A segment can be only tags (e.g. "[tense]" before a cast quote)
+            // and end up empty once processed - never send an empty request
+            if (!c.value.trim()) return;
+            if (seg.cast) c.voice = castVoice;
+            c.para = i; // paragraph index, for read-along highlighting timings
+            chunks.push(c);
+          });
         });
       });
     } else {
@@ -2179,22 +2216,24 @@
       paraCount = paras.length;
       paras.forEach(function(p, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: PARAGRAPH_GAP_MS });
-        var segs = castVoice ? splitCastSegments(p.trim()) : [{ text: p.trim(), cast: false }];
-        segs.forEach(function(seg) {
-          // A segment can be only tags (e.g. "[tense]" before a cast quote) -
-          // never send an empty request
-          var spoken = seg.text.replace(/\[(?:deep|high|low|tense|calm|happy|action)\]\s*/gi, '').trim();
-          if (!spoken) return;
-          var c;
-          if (seg.cast) {
-            // Real second voice: no narrator pitch-shift, just gentle pacing
-            c = { type: 'ssml', voice: castVoice,
-                  value: '<speak><prosody rate="88%">' + addBreaks(escXml(spoken)) + '</prosody></speak>' };
-          } else {
-            c = buildSsmlChunk([seg.text.trim()]);
-          }
-          c.para = i;
-          chunks.push(c);
+        splitLongParagraph(p.trim()).forEach(function(piece) {
+          var segs = castVoice ? splitCastSegments(piece) : [{ text: piece, cast: false }];
+          segs.forEach(function(seg) {
+            // A segment can be only tags (e.g. "[tense]" before a cast quote) -
+            // never send an empty request
+            var spoken = seg.text.replace(/\[(?:deep|high|low|tense|calm|happy|action)\]\s*/gi, '').trim();
+            if (!spoken) return;
+            var c;
+            if (seg.cast) {
+              // Real second voice: no narrator pitch-shift, just gentle pacing
+              c = { type: 'ssml', voice: castVoice,
+                    value: '<speak><prosody rate="88%">' + addBreaks(escXml(spoken)) + '</prosody></speak>' };
+            } else {
+              c = buildSsmlChunk([seg.text.trim()]);
+            }
+            c.para = i;
+            chunks.push(c);
+          });
         });
       });
     }
