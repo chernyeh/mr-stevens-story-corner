@@ -99,7 +99,8 @@
   .story-text { font-family: 'Playfair Display',serif; font-size: 1.05rem; line-height: 1.9; color: #3a3228; margin-bottom: 32px; white-space: pre-wrap; }
   .story-para { margin: 0 0 1.15em; white-space: pre-wrap; border-radius: 8px; transition: background 0.5s ease, box-shadow 0.5s ease; }
   .story-para.reading { background: rgba(232,160,69,0.14); box-shadow: 0 0 0 7px rgba(232,160,69,0.14); }
-  .story-extras { background: #fbf6ea; border: 1px solid rgba(232,160,69,0.3); border-radius: 12px; padding: 16px 18px; margin: -8px 0 26px; font-size: 0.9rem; line-height: 1.75; white-space: pre-wrap; color: #3a3228; }
+  .story-extras { background: #fbf6ea; border: 1px solid rgba(232,160,69,0.3); border-radius: 12px; padding: 16px 18px; margin: -8px 0 26px; font-size: 0.9rem; line-height: 1.75; white-space: pre-wrap; color: #3a3228; transition: background 0.5s ease, box-shadow 0.5s ease, border-color 0.5s ease; }
+  .story-extras.reading { background: rgba(232,160,69,0.16); border-color: var(--gold); box-shadow: 0 0 0 4px rgba(232,160,69,0.14); }
   .premium-row { display: flex; align-items: center; gap: 9px; margin-top: 16px; font-size: 0.85rem; cursor: pointer; opacity: 0.9; }
   .premium-row input { accent-color: var(--gold); width: 16px; height: 16px; cursor: pointer; }
   .fullcast-label { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: rgba(26,26,46,0.65); cursor: pointer; flex: 1; }
@@ -406,8 +407,40 @@
   var speechRate    = 0.95;   // user speed preference (applied via playbackRate)
   var narrationBaseRate = 0.95; // rate the current audio was synthesized at
   var fullStoryText = '';
-  var storyExtrasText = ''; // learner glossary/questions (fr/zh), shown but never narrated
+  var storyExtrasText = ''; // Discover sections / learner glossary - shown, and narrated after the finale
   var narrationTimings = null; // [{para, start, end}] for read-along highlighting
+  // Sentinel paragraph index for the spoken extras. Deliberately far beyond
+  // any real paragraph so no story paragraph highlights while they're read;
+  // the extras panel highlights instead.
+  var EXTRAS_PARA = 100000;
+
+  // Spoken lead-ins for the extras, so narration signals the shift out of the
+  // story and names each section before reading it. Keyed by the heading the
+  // model emits; an unrecognised heading is simply read aloud as written.
+  var EXTRAS_SPEECH = {
+    en: {
+      bridge: 'Before we go, here are a few things worth knowing.',
+      headings: {
+        'key terms':           'First, some key words from this story.',
+        'still debated':       'Now, here is what people still disagree about.',
+        'worth arguing about': 'And finally, something worth arguing about.'
+      }
+    },
+    fr: {
+      bridge: 'Avant de finir, voici quelques points à retenir.',
+      headings: {
+        'nouveaux mots': 'D’abord, quelques mots nouveaux.',
+        'questions':     'Et pour finir, deux questions.'
+      }
+    },
+    zh: {
+      bridge: '最后，我们再看几件事。',
+      headings: {
+        '生词': '先来看几个生词。',
+        '问题': '最后，两个问题。'
+      }
+    }
+  };
   var currentAudio  = null;
   var pendingNarrationVoice = null;
   var pendingNarrationTitle = '';
@@ -1515,6 +1548,10 @@
     for (var j = 0; j < paras.length; j++) {
       paras[j].classList.toggle('reading', parseInt(paras[j].dataset.para, 10) === active);
     }
+    // The spoken extras have no story paragraph of their own, so highlight the
+    // extras panel while they're being read.
+    var extrasEl = document.getElementById('storyExtras');
+    if (extrasEl) extrasEl.classList.toggle('reading', active === EXTRAS_PARA);
   }
 
   function updateStoryDisplay(rawText) {
@@ -1622,7 +1659,7 @@
         : '🎙️ Loading… ' + done + ' of ' + total + ' sections ready';
     }
 
-    var cacheKey = audioCacheKey(text, voice.id, storyTitle);
+    var cacheKey = audioCacheKey(text, voice.id, storyTitle, storyExtrasText);
 
     audioCacheGet(cacheKey).then(function(hit) {
       if (signal.aborted) return;
@@ -1684,7 +1721,7 @@
   var AUDIO_CACHE_DB = 'mrStevens_audio';
   var AUDIO_CACHE_STORE = 'narrations';
   var AUDIO_CACHE_MAX = 8; // WAV blobs are big; keep only the most recent
-  var NARRATION_PIPELINE_V = 4; // bump to invalidate cached audio after pipeline changes
+  var NARRATION_PIPELINE_V = 5; // bump to invalidate cached audio after pipeline changes
 
   function openAudioCache() {
     return new Promise(function(resolve, reject) {
@@ -1701,10 +1738,13 @@
     });
   }
 
-  function audioCacheKey(text, voiceId, title) {
-    // djb2-style double hash - cheap, synchronous, good enough for cache keys
+  function audioCacheKey(text, voiceId, title, extras) {
+    // djb2-style double hash - cheap, synchronous, good enough for cache keys.
+    // The extras are part of the audio now, so two pieces sharing a body but
+    // differing in their extras must not share a cache entry.
     var s = NARRATION_PIPELINE_V + '|' + voiceId + '|' + narrationBaseRate
-      + '|cast' + (isFullCastEnabled() ? 1 : 0) + '|' + title + '|' + text;
+      + '|cast' + (isFullCastEnabled() ? 1 : 0) + '|' + title + '|' + text
+      + '|x|' + (extras || '');
     var h1 = 5381, h2 = 52711;
     for (var i = 0; i < s.length; i++) {
       var c = s.charCodeAt(i);
@@ -2298,6 +2338,62 @@
         + '</prosody>'
         + '<break time="1500ms"/>'
         + '</speak>' });
+    }
+
+    // ── Spoken extras, after the finale ─────────────────────────────────────
+    // Discover pieces close with Key terms / Still debated / Worth arguing
+    // about, and the learner languages with a glossary. These render under the
+    // story but used to be left out of narration entirely, so a listener who
+    // wasn't reading along never got them at all. Read them out after "The
+    // End", with a spoken lead-in per section so the shift out of the story is
+    // unmistakable.
+    var extrasRaw = (storyExtrasText || '').trim();
+    if (extrasRaw) {
+      var speech   = EXTRAS_SPEECH[selectedLang] || EXTRAS_SPEECH.en;
+      var sections = [];
+      var curSec   = null;
+      extrasRaw.split('\n').forEach(function(line) {
+        var t = line.trim();
+        if (!t) return;
+        // A heading is a short line ending in a colon, ASCII or full-width.
+        if (/[:：]\s*$/.test(t) && t.length <= 40) {
+          curSec = { heading: t.replace(/[:：]\s*$/, '').trim(), items: [] };
+          sections.push(curSec);
+        } else {
+          if (!curSec) { curSec = { heading: '', items: [] }; sections.push(curSec); }
+          curSec.items.push(t);
+        }
+      });
+
+      // Reuse the story's own chunk builders so the extras keep the same voice
+      // and pacing rather than sounding bolted on.
+      var speakExtras = function(line) {
+        if (!line || !line.trim()) return;
+        var c = isJourney ? buildJourneyChunk(line.trim())
+              : isChinese ? chineseParagraphSsml(line.trim())
+              : buildSsmlChunk([line.trim()]);
+        if (!c || !c.value || !c.value.trim()) return;
+        c.para = EXTRAS_PARA;
+        chunks.push(c);
+      };
+
+      if (sections.length) {
+        chunks.push({ type: 'silence', durationMs: 1800 });
+        speakExtras(speech.bridge);
+        sections.forEach(function(sec) {
+          var key = sec.heading.toLowerCase().trim();
+          chunks.push({ type: 'silence', durationMs: 1200 });
+          speakExtras(speech.headings[key] || sec.heading);
+          sec.items.forEach(function(item) {
+            // Drop any bullet the model added, and read "term - meaning" as a
+            // clause rather than voicing the dash.
+            var spoken = item.replace(/^[-•*–—]\s*/, '')
+                             .replace(/\s+[-–—]\s+/g, ', ');
+            chunks.push({ type: 'silence', durationMs: 500 });
+            splitLongParagraph(spoken).forEach(speakExtras);
+          });
+        });
+      }
     }
 
     if (chunks.length === 0) chunks = [{ type: 'text', value: text.substring(0, 300) }];
