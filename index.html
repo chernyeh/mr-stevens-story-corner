@@ -322,9 +322,13 @@
     </div>
 
     <button class="generate-btn" id="generateBtn" style="display:none" onclick="generateStory()">🌙 Create My Story</button>
-    <div class="error-msg" id="errorMsg"></div>
 
   </div>
+
+  <!-- Outside #setupSection on purpose: generation hides that section, so an
+       error box living inside it was written to but never visible - a failed
+       generation looked like nothing happened at all. -->
+  <div class="error-msg" id="errorMsg"></div>
 
   <div class="loading-card" id="loadingCard">
     <div class="loading-moons"><div class="moon"></div><div class="moon"></div><div class="moon"></div></div>
@@ -1343,15 +1347,26 @@
     // assumed, so the multiplier is per-word generous rather than tuned.
     var maxTokens = Math.min(model.maxOut, Math.max(8192, Math.round(targetWords * 6 + 4000)));
 
+    var body = {
+      model: model.id,
+      max_tokens: maxTokens,
+      stream: true,
+      messages: [{ role: 'user', content: prompt }]
+    };
+    // claude-sonnet-5 thinks by default when `thinking` is omitted, and
+    // thinking streams as thinking_delta events this client ignores - so the
+    // whole thinking phase is dead air with no words on screen. The serverless
+    // proxy is capped at 60s (vercel.json), and on a 15-minute story that
+    // silent phase could burn the entire window: the function was killed
+    // before the first text token, leaving a blank story card. Storytelling
+    // does not need the extra deliberation, and Discover's factual guardrails
+    // are prompt-level, so turn it off and start writing immediately.
+    if (model.id === 'claude-sonnet-5') body.thinking = { type: 'disabled' };
+
     fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: model.id,
-        max_tokens: maxTokens,
-        stream: true,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      body: JSON.stringify(body)
     })
     .then(function(res) {
       if (!res.ok) return res.json().then(function(ed) {
@@ -1388,6 +1403,14 @@
       function processChunk() {
         return reader.read().then(function(result) {
           if (result.done) {
+            // The stream ended without a single word. Almost always the
+            // serverless proxy hitting its duration cap mid-request rather
+            // than anything the reader did - throwing routes it to the catch
+            // below, which restores the setup form so they can actually retry,
+            // instead of leaving a story card that never fills in.
+            if (!rawText.trim()) {
+              throw new Error('The story didn\'t come through — the connection timed out before any words arrived. Please try again, or pick a shorter length.');
+            }
             showStoryCard();
             var doneBtn = document.getElementById('saveBtn');
             if (doneBtn) { doneBtn.disabled = false; }
