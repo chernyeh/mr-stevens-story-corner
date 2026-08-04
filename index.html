@@ -785,7 +785,17 @@
       { emoji: '🌾', label: 'Feeding Billions',text: 'The Green Revolution in India and Mexico, the scientists behind it, and the long argument over what it cost' },
       { emoji: '🗿', label: 'Rapa Nui',        text: 'What the evidence actually shows about Easter Island, and why the familiar story of self-inflicted collapse is now seriously disputed' },
       { emoji: '🧫', label: 'The Lucky Mould', text: 'The messy and contested story of penicillin, and the people besides Fleming who turned it into a medicine' },
-      { emoji: '🏜', label: 'Timbuktu',        text: 'The manuscript libraries of Mali, what they contain, and how families hid them from destruction' }
+      { emoji: '🏜', label: 'Timbuktu',        text: 'The manuscript libraries of Mali, what they contain, and how families hid them from destruction' },
+      { emoji: '🌉', label: 'Seven Bridges',   text: 'The Königsberg bridge puzzle that stumped a city for a hundred years, and how one mathematician\'s answer created an entirely new branch of maths' },
+      { emoji: '🥁', label: 'Talking Drums',   text: 'How West African talking drums encode language itself in rhythm, letting messages travel faster than a running messenger for hundreds of miles' },
+      { emoji: '🚴', label: 'Marginal Gains',  text: 'How a cycling team used small, unglamorous science - sleep, hygiene, aerodynamics - to turn one of the worst teams in the world into champions' },
+      { emoji: '🦋', label: 'Nature\'s Blueprint', text: 'How engineers copied a burr, a shark\'s skin and a kingfisher\'s beak to invent Velcro, faster swimsuits and quieter trains' },
+      { emoji: '🧪', label: 'The Accidental Colour', text: 'How an eighteen-year-old trying to cure malaria in his kitchen accidentally invented the first synthetic dye and started a global industry' },
+      { emoji: '🐙', label: 'Alien Minds',     text: 'What scientists studying octopus intelligence are learning about a kind of mind that evolved thinking completely independently from ours' },
+      { emoji: '⏰', label: 'The Longitude Clock', text: 'How a self-taught carpenter solved the problem that was sinking Navy ships, and had to fight the scientific establishment to be believed' },
+      { emoji: '🪐', label: 'The Planet on Paper', text: 'How mathematicians predicted the existence of Neptune from wobbles in another planet\'s orbit, before anyone had seen it' },
+      { emoji: '🧵', label: 'Threads of Empire', text: 'How the silkworm was smuggled across continents in hollow canes, and how one small insect changed the economies of entire empires' },
+      { emoji: '🏺', label: 'The Broken Pot',  text: 'How archaeologists reconstruct entire vanished societies from nothing but shards of pottery and what people threw away' }
     ],
     '15-16': [
       { emoji: '🏺', label: 'The Benin Bronzes', text: 'How the Benin Bronzes left Nigeria, where they sit now, and the genuine arguments made on each side of returning them' },
@@ -801,7 +811,17 @@
       { emoji: '🕰', label: 'How We Know Dates', text: 'Radiocarbon dating, tree rings and ice layers - how the deep past is actually dated, and the uncertainty rarely mentioned alongside the numbers' },
       { emoji: '🌊', label: 'The Last Frontier', text: 'Deep-sea mining, who has any claim to the ocean floor, and the strongest case each side makes' },
       { emoji: '📚', label: 'Who Writes History',text: 'How one event is taught differently in different countries, and what that reveals about how history gets written' },
-      { emoji: '🧠', label: 'The Cost of Knowing',text: 'What famous neurological case studies taught science, and the ethics of how that knowledge was obtained' }
+      { emoji: '🧠', label: 'The Cost of Knowing',text: 'What famous neurological case studies taught science, and the ethics of how that knowledge was obtained' },
+      { emoji: '➗', label: 'The Unsolvable Proof', text: 'The 358-year hunt to prove Fermat\'s Last Theorem, and the mathematician who solved it in secret after a childhood dare' },
+      { emoji: '🎧', label: 'Who Owns a Sound',  text: 'How sampling built entire genres of music, and the court cases still deciding what counts as theft versus tribute' },
+      { emoji: '💡', label: 'Built to Break',    text: 'The evidence for and against "planned obsolescence" - whether products really are designed to fail, and what the debate reveals about who controls it' },
+      { emoji: '🖥', label: 'The Imitation Game', text: 'Alan Turing\'s test for machine intelligence, the code-breaking work that shortened a war, and the persecution that followed his own country\'s silence about it' },
+      { emoji: '🌾', label: 'The Commons Argument', text: 'Why a famous 1968 theory said shared resources are always doomed, and the economist who spent decades proving real communities again and again disprove it' },
+      { emoji: '🔬', label: 'The Prison Study',  text: 'What the Stanford Prison Experiment actually recorded versus the myth it became, and why psychology is still reckoning with it' },
+      { emoji: '🏅', label: 'Faster, Higher, Banned', text: 'The science of performance-enhancing drugs in sport, and the almost impossible line between medicine, unfairness and what "natural" even means' },
+      { emoji: '🗨', label: 'A Language on Purpose', text: 'Esperanto and the dream of a language built to belong to no country and everyone at once, and why it never quite got there' },
+      { emoji: '🌫️', label: 'The Ozone Fix',    text: 'The one global environmental crisis humanity mostly solved, who gets credit for it, and what it does and does not prove about fixing the next one' },
+      { emoji: '🚗', label: 'Who the Car Chooses', text: 'The real engineering decisions inside self-driving cars when a collision is unavoidable, and why the philosophers\' version of this problem does not match the engineers\' version' }
     ]
   };
 
@@ -920,8 +940,8 @@
   // which is the on-ramp to the Diploma Programme's theory of knowledge.
   function getDiscoverAgeInstructions(age) {
     var map = {
-      '12-14': 'Write for readers aged 12-14, following the IB Middle Years Programme. Treat the topic as an enquiry, not a summary: open with something concrete - an object, a person, a place - and let the bigger idea emerge from it. Connect the topic explicitly to its MYP subject group (Individuals and societies, Sciences, Mathematics, Arts, Design, or Language acquisition) and to the global context given in the enquiry details, without ever naming those labels in the text itself. Define technical vocabulary in-line the first time it appears. Assume real curiosity and no prior knowledge.',
-      '15-16': 'Write for readers aged 15-16, at the top of the IB Middle Years Programme and heading toward the Diploma Programme. Treat the reader as capable of holding two competing accounts at once. Do not resolve genuine disagreement artificially: set out the strongest version of each position and be explicit about what evidence would settle it. Where a claim rests on a particular kind of evidence - an excavation, a dataset, a single surviving source - say so, and say what that evidence cannot show. Avoid moralising; trust the reader to draw conclusions.'
+      '12-14': 'Write for readers aged 12-14, following the IB Middle Years Programme. Treat the topic as an enquiry, not a summary. The opening sentence is the hook: drop the reader straight into a vivid, concrete moment - an object in someone\'s hand, a decision seconds before it was made, a strange detail that does not make sense yet - never a general statement about what the topic is or why it matters. Let the bigger idea emerge only after that hook has landed. Connect the topic explicitly to its MYP subject group (Individuals and societies, Sciences, Mathematics, Arts, Design, or Language acquisition) and to the global context given in the enquiry details, without ever naming those labels in the text itself. Define technical vocabulary in-line the first time it appears. Assume real curiosity and no prior knowledge.',
+      '15-16': 'Write for readers aged 15-16, at the top of the IB Middle Years Programme and heading toward the Diploma Programme. The opening sentence is the hook: land the reader inside a specific scene, object or unresolved question sharp enough to earn their attention before they even know what the piece is about - never a topic-sentence summary of what is to come. Treat the reader as capable of holding two competing accounts at once. Do not resolve genuine disagreement artificially: set out the strongest version of each position and be explicit about what evidence would settle it. Where a claim rests on a particular kind of evidence - an excavation, a dataset, a single surviving source - say so, and say what that evidence cannot show. Avoid moralising; trust the reader to draw conclusions.'
     };
     return map[age] || map['12-14'];
   }
@@ -1295,8 +1315,8 @@
       + '- Name the people who did the work, including those who were overlooked or uncredited at the time.\n'
       + '- Describe other cultures on their own terms and from their own perspective where sources allow. No exoticising, and no framing non-European achievement as surprising.\n\n'
       + 'HOW TO WRITE IT:\n'
-      + '- Open on something concrete - an object, a person, a place, a moment - and let the larger idea grow out of it.\n'
-      + '- Keep real narrative momentum. This should be as gripping as a story, while remaining entirely factual.\n'
+      + '- The first two sentences are the hook and matter more than any other part of this piece: land the reader inside a vivid, specific moment - an object, a person, a decision, a strange detail that does not make sense yet - never a general statement about the topic or why it matters. A reader with zero interest in the subject should still want to know what happens next.\n'
+      + '- Keep real narrative momentum all the way through. This should be as gripping as a story, while remaining entirely factual.\n'
       + '- Explain every technical term in-line the first time it appears, without breaking the flow.\n'
       + '- Give the reader something to argue with: at least one point where reasonable people reach different conclusions, with the strongest case for each.\n'
       + '- End on the open question rather than a tidy moral.\n\n'
