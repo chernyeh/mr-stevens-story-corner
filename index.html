@@ -361,6 +361,14 @@
       </div>
 
       <div class="player-settings">
+        <div class="player-setting-row" id="narrationModeRow" style="display:none">
+          <span class="player-setting-label">🗣️ Narrator</span>
+          <label class="fullcast-label" title="Uses a voice already installed on your device — nothing is sent to the cloud">
+            <input type="checkbox" id="localVoiceToggle" onchange="changeNarrationMode()">
+            <span>Use my device's voice (offline)</span>
+          </label>
+          <span class="narration-mode-note" id="narrationModeNote" style="display:none;font-size:0.68rem;opacity:0.6"></span>
+        </div>
         <div class="player-setting-row">
           <span class="player-setting-label">🎙️ Voice</span>
           <select class="live-voice-select" id="liveVoiceSelect"><option value="">Loading...</option></select>
@@ -383,7 +391,7 @@
           </label>
         </div>
       </div>
-      <p class="voice-tip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Speed changes are instant; changing voice regenerates audio.</p>
+      <p class="voice-tip" id="voiceTip" style="margin-top:8px;font-size:0.68rem;color:rgba(26,26,46,0.32);font-style:italic;">💡 Journey voices are most expressive. Speed changes are instant; changing voice regenerates audio.</p>
     </div>
     <div class="story-text" id="storyText"></div>
     <div class="story-extras" id="storyExtras" style="display:none"></div>
@@ -447,6 +455,25 @@
   var narrationAbortController = null;
   var previewAudio = null;
   var builderSelections = { character: '', setting: '', twist: '', ending: '' };
+
+  // ── LOCAL (ON-DEVICE) NARRATION ──────────────────────────────────────────
+  // Web Speech API voices installed on the user's own OS - zero network
+  // calls, no Google TTS quota. narrationMode is the user's *preference*
+  // (explicit choice, or an auto-detected default); localModeActive() is
+  // the single source of truth for whether it's actually usable right now,
+  // so every control can branch on availability instead of preference and
+  // the fallback to cloud narration happens automatically everywhere.
+  var NARRATION_MODE_KEY = 'mrStevens_narrationMode'; // explicit user override only: 'cloud' | 'local'
+  var LOCAL_VOICE_KEY    = 'mrStevens_localVoiceURI';
+  var narrationMode      = 'cloud'; // current preference (explicit or auto-detected default)
+  var localVoices        = [];      // cache of speechSynthesis.getVoices()
+  var localUtterances    = [];      // [{para, text, voice, lang}] built per-play
+  var localParaIndex     = -1;
+  var localPlaybackState = 'stopped'; // 'stopped' | 'playing' | 'paused'
+  var SPEECH_SUPPORTED   = !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  function localModeActive() {
+    return narrationMode === 'local' && SPEECH_SUPPORTED && localVoices.length > 0;
+  }
 
   // ── VOICES ────────────────────────────────────────────────────────────────
   var VOICES = {
@@ -785,7 +812,17 @@
       { emoji: '🌾', label: 'Feeding Billions',text: 'The Green Revolution in India and Mexico, the scientists behind it, and the long argument over what it cost' },
       { emoji: '🗿', label: 'Rapa Nui',        text: 'What the evidence actually shows about Easter Island, and why the familiar story of self-inflicted collapse is now seriously disputed' },
       { emoji: '🧫', label: 'The Lucky Mould', text: 'The messy and contested story of penicillin, and the people besides Fleming who turned it into a medicine' },
-      { emoji: '🏜', label: 'Timbuktu',        text: 'The manuscript libraries of Mali, what they contain, and how families hid them from destruction' }
+      { emoji: '🏜', label: 'Timbuktu',        text: 'The manuscript libraries of Mali, what they contain, and how families hid them from destruction' },
+      { emoji: '🌉', label: 'Seven Bridges',   text: 'The Königsberg bridge puzzle that stumped a city for a hundred years, and how one mathematician\'s answer created an entirely new branch of maths' },
+      { emoji: '🥁', label: 'Talking Drums',   text: 'How West African talking drums encode language itself in rhythm, letting messages travel faster than a running messenger for hundreds of miles' },
+      { emoji: '🚴', label: 'Marginal Gains',  text: 'How a cycling team used small, unglamorous science - sleep, hygiene, aerodynamics - to turn one of the worst teams in the world into champions' },
+      { emoji: '🦋', label: 'Nature\'s Blueprint', text: 'How engineers copied a burr, a shark\'s skin and a kingfisher\'s beak to invent Velcro, faster swimsuits and quieter trains' },
+      { emoji: '🧪', label: 'The Accidental Colour', text: 'How an eighteen-year-old trying to cure malaria in his kitchen accidentally invented the first synthetic dye and started a global industry' },
+      { emoji: '🐙', label: 'Alien Minds',     text: 'What scientists studying octopus intelligence are learning about a kind of mind that evolved thinking completely independently from ours' },
+      { emoji: '⏰', label: 'The Longitude Clock', text: 'How a self-taught carpenter solved the problem that was sinking Navy ships, and had to fight the scientific establishment to be believed' },
+      { emoji: '🪐', label: 'The Planet on Paper', text: 'How mathematicians predicted the existence of Neptune from wobbles in another planet\'s orbit, before anyone had seen it' },
+      { emoji: '🧵', label: 'Threads of Empire', text: 'How the silkworm was smuggled across continents in hollow canes, and how one small insect changed the economies of entire empires' },
+      { emoji: '🏺', label: 'The Broken Pot',  text: 'How archaeologists reconstruct entire vanished societies from nothing but shards of pottery and what people threw away' }
     ],
     '15-16': [
       { emoji: '🏺', label: 'The Benin Bronzes', text: 'How the Benin Bronzes left Nigeria, where they sit now, and the genuine arguments made on each side of returning them' },
@@ -801,7 +838,17 @@
       { emoji: '🕰', label: 'How We Know Dates', text: 'Radiocarbon dating, tree rings and ice layers - how the deep past is actually dated, and the uncertainty rarely mentioned alongside the numbers' },
       { emoji: '🌊', label: 'The Last Frontier', text: 'Deep-sea mining, who has any claim to the ocean floor, and the strongest case each side makes' },
       { emoji: '📚', label: 'Who Writes History',text: 'How one event is taught differently in different countries, and what that reveals about how history gets written' },
-      { emoji: '🧠', label: 'The Cost of Knowing',text: 'What famous neurological case studies taught science, and the ethics of how that knowledge was obtained' }
+      { emoji: '🧠', label: 'The Cost of Knowing',text: 'What famous neurological case studies taught science, and the ethics of how that knowledge was obtained' },
+      { emoji: '➗', label: 'The Unsolvable Proof', text: 'The 358-year hunt to prove Fermat\'s Last Theorem, and the mathematician who solved it in secret after a childhood dare' },
+      { emoji: '🎧', label: 'Who Owns a Sound',  text: 'How sampling built entire genres of music, and the court cases still deciding what counts as theft versus tribute' },
+      { emoji: '💡', label: 'Built to Break',    text: 'The evidence for and against "planned obsolescence" - whether products really are designed to fail, and what the debate reveals about who controls it' },
+      { emoji: '🖥', label: 'The Imitation Game', text: 'Alan Turing\'s test for machine intelligence, the code-breaking work that shortened a war, and the persecution that followed his own country\'s silence about it' },
+      { emoji: '🌾', label: 'The Commons Argument', text: 'Why a famous 1968 theory said shared resources are always doomed, and the economist who spent decades proving real communities again and again disprove it' },
+      { emoji: '🔬', label: 'The Prison Study',  text: 'What the Stanford Prison Experiment actually recorded versus the myth it became, and why psychology is still reckoning with it' },
+      { emoji: '🏅', label: 'Faster, Higher, Banned', text: 'The science of performance-enhancing drugs in sport, and the almost impossible line between medicine, unfairness and what "natural" even means' },
+      { emoji: '🗨', label: 'A Language on Purpose', text: 'Esperanto and the dream of a language built to belong to no country and everyone at once, and why it never quite got there' },
+      { emoji: '🌫️', label: 'The Ozone Fix',    text: 'The one global environmental crisis humanity mostly solved, who gets credit for it, and what it does and does not prove about fixing the next one' },
+      { emoji: '🚗', label: 'Who the Car Chooses', text: 'The real engineering decisions inside self-driving cars when a collision is unavoidable, and why the philosophers\' version of this problem does not match the engineers\' version' }
     ]
   };
 
@@ -920,19 +967,20 @@
   // which is the on-ramp to the Diploma Programme's theory of knowledge.
   function getDiscoverAgeInstructions(age) {
     var map = {
-      '12-14': 'Write for readers aged 12-14, following the IB Middle Years Programme. Treat the topic as an enquiry, not a summary: open with something concrete - an object, a person, a place - and let the bigger idea emerge from it. Connect the topic explicitly to its MYP subject group (Individuals and societies, Sciences, Mathematics, Arts, Design, or Language acquisition) and to the global context given in the enquiry details, without ever naming those labels in the text itself. Define technical vocabulary in-line the first time it appears. Assume real curiosity and no prior knowledge.',
-      '15-16': 'Write for readers aged 15-16, at the top of the IB Middle Years Programme and heading toward the Diploma Programme. Treat the reader as capable of holding two competing accounts at once. Do not resolve genuine disagreement artificially: set out the strongest version of each position and be explicit about what evidence would settle it. Where a claim rests on a particular kind of evidence - an excavation, a dataset, a single surviving source - say so, and say what that evidence cannot show. Avoid moralising; trust the reader to draw conclusions.'
+      '12-14': 'Write for readers aged 12-14, following the IB Middle Years Programme. Treat the topic as an enquiry, not a summary. The opening sentence is the hook: drop the reader straight into a vivid, concrete moment - an object in someone\'s hand, a decision seconds before it was made, a strange detail that does not make sense yet - never a general statement about what the topic is or why it matters. Let the bigger idea emerge only after that hook has landed. Connect the topic explicitly to its MYP subject group (Individuals and societies, Sciences, Mathematics, Arts, Design, or Language acquisition) and to the global context given in the enquiry details, without ever naming those labels in the text itself. Define technical vocabulary in-line the first time it appears. Assume real curiosity and no prior knowledge.',
+      '15-16': 'Write for readers aged 15-16, at the top of the IB Middle Years Programme and heading toward the Diploma Programme. The opening sentence is the hook: land the reader inside a specific scene, object or unresolved question sharp enough to earn their attention before they even know what the piece is about - never a topic-sentence summary of what is to come. Treat the reader as capable of holding two competing accounts at once. Do not resolve genuine disagreement artificially: set out the strongest version of each position and be explicit about what evidence would settle it. Where a claim rests on a particular kind of evidence - an excavation, a dataset, a single surviving source - say so, and say what that evidence cannot show. Avoid moralising; trust the reader to draw conclusions.'
     };
     return map[age] || map['12-14'];
   }
 
   // ── VOICE & SPEED ─────────────────────────────────────────────────────────
   function populateVoiceDropdowns() {
-    var voices = VOICES[selectedLang] || VOICES.en;
-    var cfg    = LANG_CONFIG[selectedLang] || LANG_CONFIG.en;
     var select = document.getElementById('liveVoiceSelect');
     if (!select) return;
     select.innerHTML = '';
+    if (localModeActive()) { populateLocalVoiceOptions(select); return; }
+    var voices = VOICES[selectedLang] || VOICES.en;
+    var cfg    = LANG_CONFIG[selectedLang] || LANG_CONFIG.en;
     voices.forEach(function(v) {
       var opt = document.createElement('option');
       opt.value = v.id;
@@ -946,6 +994,100 @@
       if (v.id === cfg.defaultVoice) opt.selected = true;
       select.appendChild(opt);
     });
+  }
+
+  // Resolves the *preference* narrationMode from an explicit saved choice,
+  // or - if the user has never chosen - auto-defaults to whichever mode is
+  // actually usable right now. Re-evaluated on every call, so a device
+  // voice pack that arrives mid-session (or disappears) is picked up.
+  function resolveNarrationMode() {
+    var explicit = null;
+    try { explicit = localStorage.getItem(NARRATION_MODE_KEY); } catch(e) {}
+    if (explicit === 'cloud' || explicit === 'local') { narrationMode = explicit; return; }
+    var localAvailable = SPEECH_SUPPORTED && localVoices.length > 0;
+    narrationMode = localAvailable ? 'local' : 'cloud'; // no explicit choice yet: prefer local when possible
+  }
+
+  function getLocalVoices() {
+    localVoices = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+    var wasActive = localModeActive();
+    resolveNarrationMode();
+    syncNarrationModeUI();
+    if (localModeActive() !== wasActive) populateVoiceDropdowns();
+  }
+
+  function populateLocalVoiceOptions(select) {
+    var prefix  = { en: 'en', fr: 'fr', zh: 'zh' }[selectedLang] || 'en';
+    var matches = localVoices.filter(function(v) { return v.lang.toLowerCase().indexOf(prefix) === 0; });
+    var list    = matches.length ? matches : localVoices;
+    list.forEach(function(v) {
+      var opt = document.createElement('option');
+      opt.value = v.voiceURI;
+      opt.textContent = v.name + ' — ' + v.lang;
+      select.appendChild(opt);
+    });
+    var savedURI = null;
+    try { savedURI = localStorage.getItem(LOCAL_VOICE_KEY); } catch(e) {}
+    if (savedURI) {
+      for (var i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === savedURI) { select.selectedIndex = i; break; }
+      }
+    }
+  }
+
+  // Reflects narrationMode/localModeActive() onto the checkbox, the tip
+  // text and the fallback note - called after any change in preference or
+  // availability (resolveNarrationMode via getLocalVoices, changeNarrationMode).
+  function syncNarrationModeUI() {
+    var t = document.getElementById('localVoiceToggle');
+    if (t) t.checked = (narrationMode === 'local');
+    var note = document.getElementById('narrationModeNote');
+    if (note) {
+      var wantsLocalButUnavailable = narrationMode === 'local' && !localModeActive();
+      note.style.display = wantsLocalButUnavailable ? 'inline' : 'none';
+      note.textContent   = wantsLocalButUnavailable ? '⚠️ device voice unavailable — using cloud narration' : '';
+    }
+    updateVoiceTipText();
+    var skipBack = document.getElementById('skipBackBtn');
+    var skipFwd  = document.getElementById('skipFwdBtn');
+    if (skipBack) skipBack.title = localModeActive() ? 'Previous paragraph' : 'Back 10s';
+    if (skipFwd)  skipFwd.title  = localModeActive() ? 'Next paragraph'     : 'Forward 10s';
+  }
+
+  function updateVoiceTipText() {
+    var tip = document.getElementById('voiceTip');
+    if (!tip) return;
+    tip.textContent = localModeActive()
+      ? '💡 Device voice: pause/resume works, but speed and skip move between paragraphs — no fine-grained seek.'
+      : '💡 Journey voices are most expressive. Speed changes are instant; changing voice regenerates audio.';
+  }
+
+  function updateFullCastAvailability() {
+    var t   = document.getElementById('fullCastToggle');
+    var row = t ? t.closest('.player-setting-row') : null;
+    if (!t) return;
+    var active = localModeActive();
+    t.disabled = active;
+    if (row) row.style.opacity = active ? '0.4' : '1';
+    var label = t.closest('.fullcast-label');
+    if (label) {
+      if (label.dataset.defaultTitle === undefined) label.dataset.defaultTitle = label.title;
+      label.title = active ? 'Full cast requires cloud narration' : label.dataset.defaultTitle;
+    }
+  }
+
+  function changeNarrationMode() {
+    var t = document.getElementById('localVoiceToggle');
+    var wanted = (t && t.checked) ? 'local' : 'cloud';
+    narrationMode = wanted;
+    try { localStorage.setItem(NARRATION_MODE_KEY, wanted); } catch(e) {}
+    syncNarrationModeUI();
+    populateVoiceDropdowns();
+    updateFullCastAvailability();
+    if (!fullStoryText) return;
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    cancelLocalSpeech();
+    loadNarration();
   }
   function updateSliderGradient() {
     var s = document.getElementById('lengthSlider');
@@ -1295,8 +1437,8 @@
       + '- Name the people who did the work, including those who were overlooked or uncredited at the time.\n'
       + '- Describe other cultures on their own terms and from their own perspective where sources allow. No exoticising, and no framing non-European achievement as surprising.\n\n'
       + 'HOW TO WRITE IT:\n'
-      + '- Open on something concrete - an object, a person, a place, a moment - and let the larger idea grow out of it.\n'
-      + '- Keep real narrative momentum. This should be as gripping as a story, while remaining entirely factual.\n'
+      + '- The first two sentences are the hook and matter more than any other part of this piece: land the reader inside a vivid, specific moment - an object, a person, a decision, a strange detail that does not make sense yet - never a general statement about the topic or why it matters. A reader with zero interest in the subject should still want to know what happens next.\n'
+      + '- Keep real narrative momentum all the way through. This should be as gripping as a story, while remaining entirely factual.\n'
       + '- Explain every technical term in-line the first time it appears, without breaking the flow.\n'
       + '- Give the reader something to argue with: at least one point where reasonable people reach different conclusions, with the strongest case for each.\n'
       + '- End on the open question rather than a tidy moral.\n\n'
@@ -1624,8 +1766,211 @@
     loadNarration();
   }
 
-  // ── LOAD NARRATION (auto-starts; cancels any in-progress load) ──────────
+  // ── LOCAL (ON-DEVICE) NARRATION ──────────────────────────────────────────
+  // localSpeechGen guards against stray onend/onerror events from an
+  // utterance that speechSynthesis.cancel() already discarded (Safari in
+  // particular can fire onend late/inconsistently after cancel()): each
+  // utterance captures the generation it was created in, and only advances
+  // playback if that generation is still current.
+  var localSpeechGen = 0;
+  function cancelLocalSpeech() {
+    localSpeechGen++;
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    localPlaybackState = 'stopped';
+    localParaIndex = -1;
+  }
+
+  function setLocalReadingHighlight(activePara) {
+    document.querySelectorAll('#storyText .story-para').forEach(function(el) {
+      el.classList.toggle('reading', parseInt(el.dataset.para, 10) === activePara);
+    });
+    var extrasEl = document.getElementById('storyExtras');
+    if (extrasEl) extrasEl.classList.toggle('reading', activePara === EXTRAS_PARA);
+  }
+
+  // Builds the plain-text paragraph queue for Web Speech playback. Splits
+  // fullStoryText with the same regex renderStoryText() uses so data-para
+  // indices on the already-rendered .story-para elements line up, then
+  // appends the extras/glossary (if any) as plain-text entries tagged
+  // EXTRAS_PARA - a simplified, non-SSML mirror of the extras-narration
+  // block in generateGoogleAudio().
+  function buildLocalUtterances() {
+    localUtterances = [];
+    var voiceURI = document.getElementById('liveVoiceSelect').value;
+    var voice = null;
+    for (var i = 0; i < localVoices.length; i++) {
+      if (localVoices[i].voiceURI === voiceURI) { voice = localVoices[i]; break; }
+    }
+    var langCode = { en: 'en-US', fr: 'fr-FR', zh: 'zh-CN' }[selectedLang] || 'en-US';
+
+    String(fullStoryText).trim().split(/\n\s*\n/).forEach(function(p, i) {
+      var clean = stripNarrationTags(p.trim());
+      if (!clean) return;
+      localUtterances.push({ para: i, text: clean, voice: voice, lang: langCode });
+    });
+
+    var extrasRaw = (storyExtrasText || '').trim();
+    if (extrasRaw) {
+      var speech   = EXTRAS_SPEECH[selectedLang] || EXTRAS_SPEECH.en;
+      var sections = [];
+      var curSec   = null;
+      extrasRaw.split('\n').forEach(function(line) {
+        var t = line.trim();
+        if (!t) return;
+        if (/[:：]\s*$/.test(t) && t.length <= 40) {
+          curSec = { heading: t.replace(/[:：]\s*$/, '').trim(), items: [] };
+          sections.push(curSec);
+        } else {
+          if (!curSec) { curSec = { heading: '', items: [] }; sections.push(curSec); }
+          curSec.items.push(t);
+        }
+      });
+      if (sections.length) {
+        localUtterances.push({ para: EXTRAS_PARA, text: speech.bridge, voice: voice, lang: langCode });
+        sections.forEach(function(sec) {
+          var key = sec.heading.toLowerCase().trim();
+          localUtterances.push({ para: EXTRAS_PARA, text: speech.headings[key] || sec.heading, voice: voice, lang: langCode });
+          sec.items.forEach(function(item) {
+            var spoken = item.replace(/^[-•*–—]\s*/, '').replace(/\s+[-–—]\s+/g, ', ');
+            if (spoken) localUtterances.push({ para: EXTRAS_PARA, text: spoken, voice: voice, lang: langCode });
+          });
+        });
+      }
+    }
+  }
+
+  function speakNextLocalParagraph() {
+    localParaIndex++;
+    if (localParaIndex >= localUtterances.length) {
+      localPlaybackState = 'stopped';
+      document.getElementById('playBtn').textContent = '▶';
+      document.getElementById('nowReading').textContent = 'Story complete';
+      document.getElementById('progressFill').style.width = '100%';
+      setLocalReadingHighlight(-1);
+      return;
+    }
+    var item  = localUtterances[localParaIndex];
+    var myGen = localSpeechGen;
+    var utt = new SpeechSynthesisUtterance(item.text);
+    if (item.voice) utt.voice = item.voice;
+    if (item.lang)  utt.lang  = item.lang;
+    utt.rate = speechRate;
+    utt.onstart = function() {
+      if (myGen !== localSpeechGen) return;
+      setLocalReadingHighlight(item.para);
+      document.getElementById('nowReading').textContent = (item.para === EXTRAS_PARA) ? 'Reading extras…' : 'Now playing…';
+      document.getElementById('progressFill').style.width =
+        Math.round((localParaIndex / localUtterances.length) * 100) + '%';
+    };
+    utt.onend = function() {
+      if (myGen !== localSpeechGen) return;
+      if (localPlaybackState === 'playing') speakNextLocalParagraph();
+    };
+    utt.onerror = function() {
+      if (myGen !== localSpeechGen) return;
+      if (localPlaybackState === 'playing') speakNextLocalParagraph();
+    };
+    speechSynthesis.speak(utt);
+  }
+
+  function loadLocalNarration() {
+    if (narrationAbortController) { narrationAbortController.abort(); narrationAbortController = null; }
+    cancelLocalSpeech();
+    var lnr     = document.getElementById('loadNarrationRow');
+    var pc      = document.getElementById('playerControls');
+    var playBtn = document.getElementById('playBtn');
+    if (lnr)     { lnr.style.display = 'none'; }
+    if (pc)      { pc.style.display  = 'flex'; }
+    if (playBtn) { playBtn.disabled = false; playBtn.style.opacity = '1'; }
+    narrationTimings = null;
+    buildLocalUtterances();
+    document.getElementById('nowReading').textContent = localUtterances.length
+      ? 'Ready — press ▶ to begin (device voice)'
+      : '⚠️ No paragraphs to read';
+    document.getElementById('totalTime').textContent = '';
+    document.getElementById('progressFill').style.width = '0%';
+  }
+
+  function toggleLocalPlay() {
+    if (!localUtterances.length) return;
+    var playBtn = document.getElementById('playBtn');
+    if (localPlaybackState === 'stopped') {
+      localPlaybackState = 'playing';
+      speakNextLocalParagraph();
+      playBtn.textContent = '⏸';
+      document.getElementById('nowReading').textContent = 'Now playing…';
+    } else if (localPlaybackState === 'playing') {
+      speechSynthesis.pause();
+      localPlaybackState = 'paused';
+      playBtn.textContent = '▶';
+      document.getElementById('nowReading').textContent = 'Paused - press play to continue';
+    } else {
+      speechSynthesis.resume();
+      localPlaybackState = 'playing';
+      playBtn.textContent = '⏸';
+      document.getElementById('nowReading').textContent = 'Now playing…';
+    }
+  }
+
+  function stopLocalReading() {
+    cancelLocalSpeech();
+    document.getElementById('playBtn').textContent = '▶';
+    document.getElementById('progressFill').style.width = '0%';
+    document.getElementById('currentTime').textContent = '0:00';
+    document.getElementById('nowReading').textContent = 'Press play to begin narration';
+    setLocalReadingHighlight(-1);
+  }
+
+  // No sub-utterance seek exists in Web Speech, so ±10s becomes previous/
+  // next paragraph. cancel()'s onend firing is unreliable (notably on
+  // Safari), so the index is advanced directly here rather than relying on
+  // the cancelled utterance's onend to do it - localSpeechGen is bumped
+  // first so any stray event from the just-cancelled utterance no-ops
+  // instead of double-advancing.
+  function skipLocalParagraph(dir) {
+    // Only meaningful once playback has started (mirrors seekAudio's
+    // !currentAudio guard). speechSynthesis has no resume-after-cancel, so
+    // a skip always resumes playing at the new paragraph rather than
+    // trying to preserve a paused state that cancel() has already wiped out.
+    if (!localUtterances.length || localPlaybackState === 'stopped') return;
+    localSpeechGen++;
+    speechSynthesis.cancel();
+    var target = localParaIndex + dir;
+    if (target < -1) target = -1;
+    if (target > localUtterances.length - 1) target = localUtterances.length - 1;
+    localParaIndex = target - 1; // speakNextLocalParagraph() increments before use
+    localPlaybackState = 'playing';
+    speakNextLocalParagraph();
+    var playBtn = document.getElementById('playBtn');
+    if (playBtn) playBtn.textContent = '⏸';
+  }
+
+  function previewLocalVoice() {
+    var btn = document.getElementById('previewVoiceBtn');
+    if (!btn || btn.disabled) return;
+    var voiceURI = document.getElementById('liveVoiceSelect').value;
+    var voice = null;
+    for (var i = 0; i < localVoices.length; i++) {
+      if (localVoices[i].voiceURI === voiceURI) { voice = localVoices[i]; break; }
+    }
+    if (!voice) return;
+    // Web Speech has one global utterance queue, so previewing must fully
+    // stop any in-progress local narration first (bumps localSpeechGen, so
+    // the interrupted story utterance's stray onend can't double-advance).
+    if (localPlaybackState !== 'stopped') stopLocalReading();
+    else cancelLocalSpeech();
+    var phrase = (PREVIEW_PHRASES[selectedLang] || PREVIEW_PHRASES.en);
+    var utt = new SpeechSynthesisUtterance(phrase);
+    utt.voice = voice;
+    utt.rate  = speechRate;
+    btn.disabled = true; btn.textContent = '🔊 Playing';
+    utt.onend = utt.onerror = function() { btn.disabled = false; btn.textContent = '▶ Preview'; };
+    speechSynthesis.speak(utt);
+  }
+
   function loadNarration() {
+    if (localModeActive()) { loadLocalNarration(); return; }
+    if (narrationMode === 'local') syncNarrationModeUI(); // preference unmet: surface the fallback note
     if (!pendingNarrationVoice || !fullStoryText) return;
     if (narrationAbortController) { narrationAbortController.abort(); }
     narrationAbortController = new AbortController();
@@ -1708,6 +2053,7 @@
   }
 
   function seekAudio(seconds) {
+    if (localModeActive()) { skipLocalParagraph(seconds > 0 ? 1 : -1); return; }
     if (!currentAudio) return;
     var t = currentAudio.currentTime + seconds;
     if (t < 0) t = 0;
@@ -2709,6 +3055,7 @@
     });
   }
   function togglePlay() {
+    if (localModeActive()) { toggleLocalPlay(); return; }
     if (!currentAudio) return;
     if (currentAudio.paused) {
       currentAudio.play();
@@ -2721,6 +3068,7 @@
     }
   }
   function stopReading() {
+    if (localModeActive()) { stopLocalReading(); return; }
     if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
     document.getElementById('playBtn').textContent      = '\u25b6';
     document.getElementById('progressFill').style.width = '0%';
@@ -2728,7 +3076,13 @@
     document.getElementById('nowReading').textContent   = 'Press play to begin narration';
     updateReadingHighlight(-1);
   }
+  var PREVIEW_PHRASES = {
+    en: 'Hello! I\'m your story narrator. Let me tell you a wonderful tale.',
+    fr: 'Bonjour ! Je suis votre narrateur. Laissez-moi vous raconter une histoire.',
+    zh: '你好！我是你的故事讲述者，让我给你讲一个精彩的故事。'
+  };
   function previewVoice() {
+    if (localModeActive()) { previewLocalVoice(); return; }
     var btn = document.getElementById('previewVoiceBtn');
     if (!btn || btn.disabled) return;
     var voiceId = document.getElementById('liveVoiceSelect').value;
@@ -2740,12 +3094,7 @@
     if (previewAudio) { previewAudio.pause(); previewAudio = null; }
     btn.disabled = true; btn.textContent = '⏳';
 
-    var phrases = {
-      en: 'Hello! I\'m your story narrator. Let me tell you a wonderful tale.',
-      fr: 'Bonjour ! Je suis votre narrateur. Laissez-moi vous raconter une histoire.',
-      zh: '你好！我是你的故事讲述者，让我给你讲一个精彩的故事。'
-    };
-    var phrase = phrases[selectedLang] || phrases.en;
+    var phrase = PREVIEW_PHRASES[selectedLang] || PREVIEW_PHRASES.en;
     var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
     var isStudio  = voiceId.toLowerCase().indexOf('studio')  !== -1;
     var isChinese = voice.lang === 'cmn-CN';
@@ -2802,6 +3151,13 @@
 
   function changeVoiceLive() {
     if (!fullStoryText) return;
+    if (localModeActive()) {
+      try { localStorage.setItem(LOCAL_VOICE_KEY, document.getElementById('liveVoiceSelect').value); } catch(e) {}
+      if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+      cancelLocalSpeech();
+      loadNarration();
+      return;
+    }
     var voiceId = document.getElementById('liveVoiceSelect').value;
     var voices  = VOICES[selectedLang] || VOICES.en;
     var voice   = null;
@@ -2856,10 +3212,17 @@
     var themeInput = document.getElementById('themeInput');
     if (themeInput) themeInput.addEventListener('input', function() { if (selectedAge) renderBuilder(); });
     updateSliderGradient();
+    if (SPEECH_SUPPORTED) {
+      var modeRow = document.getElementById('narrationModeRow');
+      if (modeRow) modeRow.style.display = 'flex';
+      getLocalVoices(); // may return [] synchronously; re-runs on voiceschanged and resolves narrationMode
+      speechSynthesis.onvoiceschanged = getLocalVoices;
+    }
     populateVoiceDropdowns();
     updateSpeedSlider(0.95);
     restorePremiumPref();
     restoreFullCastPref();
+    updateFullCastAvailability();
   }
 
   if (document.readyState === 'loading') {
