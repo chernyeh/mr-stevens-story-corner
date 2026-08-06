@@ -1016,11 +1016,14 @@
     if (localModeActive() !== wasActive) populateVoiceDropdowns();
   }
 
-  // iOS/macOS encode voice quality in voiceURI (e.g. "...compact...",
-  // "...enhanced...", "...premium..." - downloaded Enhanced/Premium voices
-  // carry one of the latter two). There's no standard cross-browser quality
-  // field on SpeechSynthesisVoice, so this is a best-effort convention
-  // match against Apple's naming, not a spec guarantee.
+  // Voice quality, where the platform exposes it. Apple encodes it in the
+  // voiceURI ("...enhanced...", "...premium..."), and macOS Chrome/Edge/
+  // Firefox plus Android surface those voices. iOS deliberately does NOT:
+  // per Apple, "with Web Speech APIs only the pre-installed voices are
+  // available. Optionally downloadable voices are not available" - so on
+  // iPhone this returns null for everything and the labels never appear,
+  // no matter what the user has downloaded. There is no cross-browser
+  // quality field to use instead; this is a naming convention, not a spec.
   function localVoiceQuality(v) {
     var id = ((v.voiceURI || '') + ' ' + (v.name || '')).toLowerCase();
     if (id.indexOf('premium')  !== -1) return 'Premium';
@@ -1028,17 +1031,47 @@
     return null;
   }
 
+  // Legacy MacinTalk voices Apple still ships: novelty/sound-effect ones
+  // (Zarvox, Bubbles, Trinoids...) and 1990s PlainTalk speech voices
+  // (Fred, Kathy, Ralph...). Both are unusable for narrating a story, and
+  // on iOS they pad the picker out to ~30 entries that bury the handful of
+  // real voices. Matched on name, NOT on the com.apple.speech.synthesis.voice
+  // URI prefix - that prefix is also used by genuine compact voices in some
+  // OS versions (e.g. com.apple.speech.synthesis.voice.agata.compact), so a
+  // prefix rule would hide the good voices along with the junk.
+  var NOVELTY_VOICE_NAMES = {
+    'albert':1, 'bad news':1, 'bahh':1, 'bells':1, 'boing':1, 'bubbles':1,
+    'cellos':1, 'deranged':1, 'fred':1, 'good news':1, 'hysterical':1,
+    'jester':1, 'junior':1, 'kathy':1, 'organ':1, 'pipe organ':1,
+    'princess':1, 'ralph':1, 'superstar':1, 'trinoids':1, 'whisper':1,
+    'wobble':1, 'zarvox':1, 'bruce':1, 'agnes':1, 'vicki':1, 'victoria':1
+  };
+  function isNoveltyVoice(v) {
+    return !!NOVELTY_VOICE_NAMES[String(v.name || '').trim().toLowerCase()];
+  }
+
+  // Best voice first: Premium, then Enhanced, then the platform default,
+  // then everything else - alphabetical inside each tier. The dropdown
+  // preselects its first option, so ordering decides the default voice.
+  function localVoiceRank(v) {
+    var q = localVoiceQuality(v);
+    if (q === 'Premium')  return 0;
+    if (q === 'Enhanced') return 1;
+    return v['default'] ? 2 : 3;
+  }
+
   function populateLocalVoiceOptions(select) {
-    // Quality filter comes first and wins: only Enhanced/Premium voices are
-    // ever shown when any exist on-device, regardless of story language.
-    // Falls back to every voice only if the device has none tagged at all
-    // (e.g. no Enhanced/Premium voices downloaded, or a browser/OS that
-    // doesn't expose the distinction) - otherwise selection would go empty.
-    var premium = localVoices.filter(function(v) { return !!localVoiceQuality(v); });
-    var pool    = premium.length ? premium : localVoices;
-    var prefix  = { en: 'en', fr: 'fr', zh: 'zh' }[selectedLang] || 'en';
-    var byLang  = pool.filter(function(v) { return v.lang.toLowerCase().indexOf(prefix) === 0; });
-    var list    = byLang.length ? byLang : pool;
+    // Each filter falls back to the previous pool rather than to an empty
+    // list, so the picker always offers something: drop novelty voices,
+    // then narrow to the story language, then give up and show everything.
+    var real   = localVoices.filter(function(v) { return !isNoveltyVoice(v); });
+    var pool   = real.length ? real : localVoices;
+    var prefix = { en: 'en', fr: 'fr', zh: 'zh' }[selectedLang] || 'en';
+    var byLang = pool.filter(function(v) { return v.lang.toLowerCase().indexOf(prefix) === 0; });
+    var list   = (byLang.length ? byLang : pool).slice().sort(function(a, b) {
+      var d = localVoiceRank(a) - localVoiceRank(b);
+      return d !== 0 ? d : String(a.name).localeCompare(String(b.name));
+    });
     list.forEach(function(v) {
       var opt = document.createElement('option');
       opt.value = v.voiceURI;
@@ -1078,7 +1111,7 @@
     var tip = document.getElementById('voiceTip');
     if (!tip) return;
     tip.textContent = localModeActive()
-      ? '💡 Device voice: pause/resume works, but speed and skip move between paragraphs — no fine-grained seek.'
+      ? '💡 Device voices work offline with no waiting, but browsers only get your phone’s standard voices — downloaded Enhanced/Premium ones stay locked to Apple’s own apps. Speed and skip move between paragraphs.'
       : '💡 Journey voices are most expressive. Speed changes are instant; changing voice regenerates audio.';
   }
 
@@ -2087,30 +2120,45 @@
   var AUDIO_CACHE_DB = 'mrStevens_audio';
   var AUDIO_CACHE_STORE = 'narrations';
   var AUDIO_CACHE_MAX = 8; // WAV blobs are big; keep only the most recent
+  // Individual synthesized sections, cached separately from the finished
+  // narration. A story that loses a few sections to Google's per-minute
+  // quota used to cache nothing at all, so "Retry narration" re-synthesized
+  // every section - re-spending quota on the ~90% that had already
+  // succeeded, which is exactly why retries kept failing the same way. With
+  // per-section entries a retry only re-requests what actually failed.
+  var CHUNK_CACHE_STORE = 'chunks';
+  // ~60KB of base64 MP3 per section and ~65 sections in a long story, so 500
+  // is several stories' worth (~30MB) - enough to cover retries and voice
+  // switches without hoarding audio the finished-narration cache already has.
+  var CHUNK_CACHE_MAX = 500;
+  var AUDIO_CACHE_VERSION = 2; // IndexedDB schema version (v2 added 'chunks')
   var NARRATION_PIPELINE_V = 5; // bump to invalidate cached audio after pipeline changes
 
   function openAudioCache() {
     return new Promise(function(resolve, reject) {
       if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
-      var req = indexedDB.open(AUDIO_CACHE_DB, 1);
+      var req = indexedDB.open(AUDIO_CACHE_DB, AUDIO_CACHE_VERSION);
       req.onupgradeneeded = function() {
         var db = req.result;
         if (!db.objectStoreNames.contains(AUDIO_CACHE_STORE)) {
           db.createObjectStore(AUDIO_CACHE_STORE, { keyPath: 'key' });
         }
+        if (!db.objectStoreNames.contains(CHUNK_CACHE_STORE)) {
+          db.createObjectStore(CHUNK_CACHE_STORE, { keyPath: 'key' });
+        }
       };
       req.onsuccess = function() { resolve(req.result); };
       req.onerror   = function() { reject(req.error); };
+      // Another tab still holding the old schema version blocks the upgrade.
+      // Without this the promise would never settle, and since narration now
+      // consults the cache before every section, that would hang loading
+      // outright rather than just missing the cache.
+      req.onblocked = function() { reject(new Error('IndexedDB upgrade blocked')); };
     });
   }
 
-  function audioCacheKey(text, voiceId, title, extras) {
-    // djb2-style double hash - cheap, synchronous, good enough for cache keys.
-    // The extras are part of the audio now, so two pieces sharing a body but
-    // differing in their extras must not share a cache entry.
-    var s = NARRATION_PIPELINE_V + '|' + voiceId + '|' + narrationBaseRate
-      + '|cast' + (isFullCastEnabled() ? 1 : 0) + '|' + title + '|' + text
-      + '|x|' + (extras || '');
+  // djb2-style double hash - cheap, synchronous, good enough for cache keys.
+  function hashString(s) {
     var h1 = 5381, h2 = 52711;
     for (var i = 0; i < s.length; i++) {
       var c = s.charCodeAt(i);
@@ -2118,6 +2166,64 @@
       h2 = (Math.imul(h2, 31) ^ c) >>> 0;
     }
     return h1.toString(36) + '-' + h2.toString(36) + '-' + s.length;
+  }
+
+  function audioCacheKey(text, voiceId, title, extras) {
+    // The extras are part of the audio now, so two pieces sharing a body but
+    // differing in their extras must not share a cache entry.
+    return hashString(NARRATION_PIPELINE_V + '|' + voiceId + '|' + narrationBaseRate
+      + '|cast' + (isFullCastEnabled() ? 1 : 0) + '|' + title + '|' + text
+      + '|x|' + (extras || ''));
+  }
+
+  // Keyed on everything that changes the returned audio: the exact text or
+  // SSML, the voice actually used for it (full-cast segments override the
+  // narrator), and the synthesis rate. Title/story identity deliberately
+  // play no part - identical sections across stories can share audio.
+  function chunkCacheKey(chunk, voiceName, langCode, rate) {
+    return hashString('c' + NARRATION_PIPELINE_V + '|' + voiceName + '|' + langCode
+      + '|' + rate + '|' + chunk.type + '|' + chunk.value);
+  }
+
+  // Treated as a fast optional lookup, never a dependency: anything slow or
+  // broken resolves null and the section just goes to the network. Narration
+  // must not be able to stall behind the cache.
+  function chunkCacheGet(key) {
+    var lookup = openAudioCache().then(function(db) {
+      return new Promise(function(resolve) {
+        var tx = db.transaction(CHUNK_CACHE_STORE, 'readonly');
+        var rq = tx.objectStore(CHUNK_CACHE_STORE).get(key);
+        rq.onsuccess = function() { resolve(rq.result ? rq.result.b64 : null); };
+        rq.onerror   = function() { resolve(null); };
+      });
+    }).catch(function() { return null; });
+    return Promise.race([
+      lookup,
+      new Promise(function(resolve) { setTimeout(function() { resolve(null); }, 3000); })
+    ]);
+  }
+
+  function chunkCachePut(key, b64) {
+    return openAudioCache().then(function(db) {
+      return new Promise(function(resolve) {
+        var tx = db.transaction(CHUNK_CACHE_STORE, 'readwrite');
+        var store = tx.objectStore(CHUNK_CACHE_STORE);
+        store.put({ key: key, b64: b64, t: Date.now() });
+        // count() is cheap; the full read needed to find the oldest entries
+        // is not, so only pay for it once actually over the cap.
+        var cnt = store.count();
+        cnt.onsuccess = function() {
+          if (cnt.result <= CHUNK_CACHE_MAX) return;
+          var all = store.getAll();
+          all.onsuccess = function() {
+            var entries = (all.result || []).sort(function(a, b) { return b.t - a.t; });
+            for (var i = CHUNK_CACHE_MAX; i < entries.length; i++) store.delete(entries[i].key);
+          };
+        };
+        tx.oncomplete = function() { resolve(); };
+        tx.onerror    = function() { resolve(); };
+      });
+    }).catch(function() { /* cache is best-effort */ });
   }
 
   function audioCacheGet(key) {
@@ -2824,29 +2930,46 @@
     // burst, and (since withTimeout is now invoked lazily, only when a chunk
     // actually gets its turn) each chunk's 30s budget no longer starts
     // ticking before its request is even sent.
-    var CHUNK_CONCURRENCY = 5;
-    function runWithConcurrency(items, limit, worker) {
+    // The cap is adaptive rather than fixed: 5-at-a-time is what exhausts
+    // the per-minute quota on premium voice tiers partway through a long
+    // story, so start lower and collapse to serial the moment the quota
+    // actually complains. Ramping back up would just re-trip it, so the
+    // narrowed cap holds for the rest of the run.
+    var CHUNK_CONCURRENCY     = 3;
+    var CHUNK_CONCURRENCY_MIN = 1;
+    var activeConcurrency     = CHUNK_CONCURRENCY;
+
+    function runWithConcurrency(items, getLimit, worker) {
       return new Promise(function(resolve, reject) {
         if (items.length === 0) { resolve([]); return; }
         var results = new Array(items.length);
         var nextIndex = 0;
         var settledCount = 0;
+        var inFlight = 0;
         var rejected = false;
 
-        function startOne() {
-          if (rejected || nextIndex >= items.length) return;
-          var i = nextIndex++;
+        function startOne(i) {
+          inFlight++;
           Promise.resolve(worker(items[i], i))
             .then(function(res) { results[i] = res; }, function(err) { rejected = true; reject(err); })
             .then(function() {
+              inFlight--;
               settledCount++;
               if (rejected) return;
               if (settledCount === items.length) { resolve(results); return; }
-              startOne();
+              pump();
             });
         }
 
-        for (var k = 0; k < Math.min(limit, items.length); k++) startOne();
+        // Re-reads the limit every time, so a mid-run drop takes effect
+        // immediately. Shrinking never strands work: the already-in-flight
+        // requests each call pump() as they settle, so dispatch resumes as
+        // soon as in-flight falls back under the new cap.
+        function pump() {
+          while (!rejected && inFlight < getLimit() && nextIndex < items.length) startOne(nextIndex++);
+        }
+
+        pump();
       });
     }
 
@@ -2865,6 +2988,11 @@
     // out on repeated hits (capped at ~65s - quota windows are per-minute,
     // waiting longer is wasted). The 30s timeout now applies per attempt.
     var quotaCooldownUntil = 0;
+    // Both stay off until the quota actually complains, so a healthy story
+    // still loads at full speed.
+    var QUOTA_REQUEST_SPACING_MS = 400;
+    var minRequestSpacing = 0;
+    var nextRequestSlot   = 0;
 
     function abortableSleep(ms) {
       return new Promise(function(resolve, reject) {
@@ -2886,6 +3014,13 @@
     function noteQuotaError() {
       var from = Math.max(Date.now(), quotaCooldownUntil);
       quotaCooldownUntil = Math.min(from + 10000, Date.now() + 65000);
+      // Narrow the dispatch cap AND start spacing requests out. The cap
+      // alone is not enough: sections whose workers already started are
+      // parked inside waitForQuotaGate, and they all wake the instant the
+      // cooldown lifts - a thundering herd that re-trips the very quota we
+      // just backed off from. Spacing throttles that release too.
+      activeConcurrency  = CHUNK_CONCURRENCY_MIN;
+      minRequestSpacing  = QUOTA_REQUEST_SPACING_MS;
       // Tell the player UI why loading has paused
       if (typeof onProgress === 'function') onProgress(completedSections, textChunkCount, 'busy');
     }
@@ -2896,16 +3031,37 @@
       return abortableSleep(Math.min(wait, 1500)).then(waitForQuotaGate);
     }
 
+    // Hands out request start times at least minRequestSpacing apart, so
+    // however many sections are waiting, they leave one at a time. No-op
+    // until a quota error switches spacing on.
+    function reserveRequestSlot() {
+      if (!minRequestSpacing) return Promise.resolve();
+      var now = Date.now();
+      var at  = Math.max(now, nextRequestSlot);
+      nextRequestSlot = at + minRequestSpacing;
+      var wait = at - now;
+      return wait > 0 ? abortableSleep(wait) : Promise.resolve();
+    }
+
+    function decodeB64Audio(b64) {
+      var bin = atob(b64);
+      var ab = new ArrayBuffer(bin.length);
+      var view = new Uint8Array(ab);
+      for (var k = 0; k < bin.length; k++) view[k] = bin.charCodeAt(k);
+      return audioCtx.decodeAudioData(ab);
+    }
+
     // One network attempt, individually time-boxed
     function fetchChunkOnce(chunk) {
+      // Full-cast segments override the narrator with a companion voice
+      var vName = chunk.voice ? chunk.voice.id   : voiceId;
+      var vLang = chunk.voice ? chunk.voice.lang : languageCode;
       var reqBody = {
         input: chunk.type === 'ssml' ? { ssml: chunk.value } : { text: chunk.value },
-        // Full-cast segments override the narrator with a companion voice
-        voice: chunk.voice
-          ? { languageCode: chunk.voice.lang, name: chunk.voice.id }
-          : { languageCode: languageCode, name: voiceId },
+        voice: { languageCode: vLang, name: vName },
         audioConfig: audioConfig
       };
+      var ckey = chunkCacheKey(chunk, vName, vLang, audioConfig.speakingRate);
       return withTimeout(
         fetch(TTS_URL, { method: 'POST', signal: signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) })
           .then(function(r) {
@@ -2914,18 +3070,34 @@
           })
           .then(function(d) {
             if (!d.audioContent) throw new Error('No audio content received');
-            var bin = atob(d.audioContent);
-            var ab = new ArrayBuffer(bin.length);
-            var view = new Uint8Array(ab);
-            for (var k = 0; k < bin.length; k++) view[k] = bin.charCodeAt(k);
-            return audioCtx.decodeAudioData(ab);
+            chunkCachePut(ckey, d.audioContent);
+            return decodeB64Audio(d.audioContent);
           }),
         30000);
     }
 
+    // A section already synthesized on an earlier attempt is served straight
+    // from IndexedDB - no request, no quota, no waiting behind the cooldown
+    // gate. This is what makes a retry after a partial failure cheap: only
+    // the sections that actually failed go back to the network.
+    function fetchChunkCachedOrOnce(chunk) {
+      var vName = chunk.voice ? chunk.voice.id   : voiceId;
+      var vLang = chunk.voice ? chunk.voice.lang : languageCode;
+      var ckey  = chunkCacheKey(chunk, vName, vLang, audioConfig.speakingRate);
+      return chunkCacheGet(ckey).then(function(b64) {
+        if (b64) {
+          return decodeB64Audio(b64).catch(function() {
+            return fetchChunkOnce(chunk); // corrupt entry: fall back to network
+          });
+        }
+        return waitForQuotaGate()
+          .then(reserveRequestSlot)
+          .then(function() { return fetchChunkOnce(chunk); });
+      });
+    }
+
     function fetchChunkWithRetry(chunk, ti, retriesLeft, delay) {
-      return waitForQuotaGate()
-        .then(function() { return fetchChunkOnce(chunk); })
+      return fetchChunkCachedOrOnce(chunk)
         .then(function(decoded) { addPhase(ti, 1.0); return decoded; })
         .catch(function(err) {
           if (err.name === 'AbortError') throw err;
@@ -2946,7 +3118,7 @@
     // Count chunk failures for graceful degradation
     var chunkWarnings = 0;
 
-    return runWithConcurrency(chunks, CHUNK_CONCURRENCY, function(chunk, idx) {
+    return runWithConcurrency(chunks, function() { return activeConcurrency; }, function(chunk, idx) {
       var ti = chunkTextIdx[idx];
       if (chunk.type === 'silence') {
         var n = Math.floor(audioCtx.sampleRate * chunk.durationMs / 1000);
