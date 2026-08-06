@@ -1016,14 +1016,34 @@
     if (localModeActive() !== wasActive) populateVoiceDropdowns();
   }
 
+  // iOS/macOS encode voice quality in voiceURI (e.g. "...compact...",
+  // "...enhanced...", "...premium..." - downloaded Enhanced/Premium voices
+  // carry one of the latter two). There's no standard cross-browser quality
+  // field on SpeechSynthesisVoice, so this is a best-effort convention
+  // match against Apple's naming, not a spec guarantee.
+  function localVoiceQuality(v) {
+    var id = ((v.voiceURI || '') + ' ' + (v.name || '')).toLowerCase();
+    if (id.indexOf('premium')  !== -1) return 'Premium';
+    if (id.indexOf('enhanced') !== -1) return 'Enhanced';
+    return null;
+  }
+
   function populateLocalVoiceOptions(select) {
+    // Quality filter comes first and wins: only Enhanced/Premium voices are
+    // ever shown when any exist on-device, regardless of story language.
+    // Falls back to every voice only if the device has none tagged at all
+    // (e.g. no Enhanced/Premium voices downloaded, or a browser/OS that
+    // doesn't expose the distinction) - otherwise selection would go empty.
+    var premium = localVoices.filter(function(v) { return !!localVoiceQuality(v); });
+    var pool    = premium.length ? premium : localVoices;
     var prefix  = { en: 'en', fr: 'fr', zh: 'zh' }[selectedLang] || 'en';
-    var matches = localVoices.filter(function(v) { return v.lang.toLowerCase().indexOf(prefix) === 0; });
-    var list    = matches.length ? matches : localVoices;
+    var byLang  = pool.filter(function(v) { return v.lang.toLowerCase().indexOf(prefix) === 0; });
+    var list    = byLang.length ? byLang : pool;
     list.forEach(function(v) {
       var opt = document.createElement('option');
       opt.value = v.voiceURI;
-      opt.textContent = v.name + ' — ' + v.lang;
+      var quality = localVoiceQuality(v);
+      opt.textContent = v.name + ' — ' + v.lang + (quality ? ' · ' + quality : '');
       select.appendChild(opt);
     });
     var savedURI = null;
