@@ -2132,7 +2132,7 @@
   // switches without hoarding audio the finished-narration cache already has.
   var CHUNK_CACHE_MAX = 500;
   var AUDIO_CACHE_VERSION = 2; // IndexedDB schema version (v2 added 'chunks')
-  var NARRATION_PIPELINE_V = 5; // bump to invalidate cached audio after pipeline changes
+  var NARRATION_PIPELINE_V = 7; // bump to invalidate cached audio after pipeline changes
 
   function openAudioCache() {
     return new Promise(function(resolve, reject) {
@@ -2340,12 +2340,17 @@
       s = s.replace(/([,;])(\u201d(?:<\/prosody>)?|&quot;)\s+/g, '$1$2<break time="250ms"/> ');
       // Full stop - definitive pause (Google applies natural downward inflection)
       s = s.replace(/\.\s+/g, '.<break time="600ms"/> ');
-      // Question mark - pitch-up prosody on the mark itself for genuine curiosity
-      s = s.replace(/\?\s+/g, '<prosody pitch="+2st">?</prosody><break time="400ms"/> ');
-      s = s.replace(/\?$/, '<prosody pitch="+2st">?</prosody>');
-      // Exclamation mark - rate-boost for energy and urgency
-      s = s.replace(/!\s+/g, '<prosody rate="108%">!</prosody><break time="380ms"/> ');
-      s = s.replace(/!$/, '<prosody rate="108%">!</prosody>');
+      // Question and exclamation marks are left bare, exactly like the full
+      // stop above. They used to be wrapped in a <prosody> span of their own
+      // ("<prosody pitch=\"+2st\">?</prosody>"), which was counterproductive:
+      // a prosody element is a prosodic boundary, so wrapping only the mark
+      // cut it off from the clause it belongs to, and the engine no longer
+      // applied the interrogative rise across the words leading up to it - it
+      // pitched up a silent character instead. Google already gives a bare ?
+      // its rising contour and a bare ! its extra energy, across the whole
+      // clause, which is what actually makes a question sound like one.
+      s = s.replace(/\?\s+/g, '?<break time="400ms"/> ');
+      s = s.replace(/!\s+/g, '!<break time="380ms"/> ');
       // Comma - short breath
       s = s.replace(/,\s+/g, ',<break time="250ms"/> ');
       // Semicolon - mid pause
@@ -2442,6 +2447,79 @@
         }
       }
       if (cursor < para.length) segs.push({ text: para.slice(cursor), cast: false });
+      return segs;
+    }
+
+    // ── Journey dialogue contrast ───────────────────────────────────────────
+    // The SSML voices mark a line of dialogue by pitch AND rate (+2st/122% for
+    // an excited one, -3st/82% for a deep one, +0.8st/105% otherwise). Journey
+    // has neither tag, so its dialogue was indistinguishable from its
+    // narration: the same voice, the same pace, quote marks the listener
+    // cannot hear. Rate is per request, so splitting a quote into its own
+    // request buys back the one dimension available - the numbers below are
+    // the SSML path's rate swings, widened a little because here rate carries
+    // the whole contrast rather than sharing it with a pitch shift.
+    var JOURNEY_DIALOGUE_RATE = { high: 1.14, low: 0.87, neutral: 1.05 };
+    // Splitting has a cost - an extra TTS request per quote, and a seam in the
+    // middle of a paragraph - so it is only worth doing for dialogue with
+    // enough substance to hear the contrast on. Short interjections stay in
+    // the narration segment.
+    var JOURNEY_DIALOGUE_MIN_CHARS = 25;
+    // A stranded scrap like ` he said.` synthesized as its own utterance gets
+    // read as a whole sentence, with a weight it should never carry. Anything
+    // this short is folded back into its neighbour instead.
+    var JOURNEY_FRAGMENT_MIN_CHARS = 12;
+    // Google trims the silence off the end of every clip, so where a paragraph
+    // is split the narration would butt straight into the quote - tighter than
+    // it read as a single request, and tighter than a person telling the story
+    // would ever say it. This is the beat before someone speaks.
+    var JOURNEY_SEAM_MS = 150;
+
+    // Splits a paragraph into narration and dialogue segments, tagging each
+    // quote with the mood the explicit tag or keyword scan gives it. Returns a
+    // single narration segment when there is no quote worth splitting out.
+    function splitJourneySegments(para) {
+      var raw = [];
+      var cursor = 0;
+      var re = /(?:\[(deep|low|high)\]\s*)?(“[^”]{1,300}”)/g;
+      var m;
+      while ((m = re.exec(para)) !== null) {
+        var quote = m[2];
+        if (quote.length < JOURNEY_DIALOGUE_MIN_CHARS) continue;
+        var tag = m[1] ? m[1].toLowerCase() : null;
+        var start = m.index;
+        var before = para.slice(Math.max(0, start - DIALOGUE_CONTEXT_WINDOW), start);
+        var after  = para.slice(re.lastIndex, re.lastIndex + DIALOGUE_CONTEXT_WINDOW);
+        var mood;
+        if (tag === 'deep' || tag === 'low') mood = 'low';
+        else if (tag === 'high')             mood = 'high';
+        else mood = classifyDialogueContext(before + ' ' + after);
+        // The companion voice, when full cast is on, is reserved for dialogue
+        // actually being spoken in the scene - same rule as splitCastSegments.
+        var isCast = false;
+        if (castVoice && !REPORTED_SPEECH_RE.test(before)) {
+          if (tag === 'deep' || tag === 'low') isCast = true;
+          else if (!tag) isCast = CAST_LOW_VERB_RE.test(before + ' ' + after);
+        }
+        if (start > cursor) raw.push({ text: para.slice(cursor, start), dialogue: false });
+        raw.push({ text: quote, dialogue: true, mood: mood, cast: isCast });
+        cursor = re.lastIndex;
+      }
+      if (cursor < para.length) raw.push({ text: para.slice(cursor), dialogue: false });
+      if (raw.length <= 1) return [{ text: para, dialogue: false }];
+
+      // Fold the scraps back in, keeping the neighbour's treatment.
+      var segs = [];
+      raw.forEach(function(seg) {
+        var prev = segs[segs.length - 1];
+        if (prev && seg.text.trim().length < JOURNEY_FRAGMENT_MIN_CHARS) prev.text += seg.text;
+        else segs.push(seg);
+      });
+      // A leading scrap has no previous segment to join, so it merges forward.
+      if (segs.length > 1 && segs[0].text.trim().length < JOURNEY_FRAGMENT_MIN_CHARS) {
+        segs[1].text = segs[0].text + segs[1].text;
+        segs.shift();
+      }
       return segs;
     }
 
@@ -2542,7 +2620,32 @@
       var finalRate  = Math.min(115, Math.max(65, baseRate + rateOff));
       var finalPitch = basePitch + pitchOff;
       var pitchStr = finalPitch === 0 ? '0st' : (finalPitch > 0 ? '+' : '') + finalPitch.toFixed(1) + 'st';
-      return { rate: finalRate + '%', pitch: pitchStr };
+      // rateFactor is the same decision expressed as a multiplier rather than
+      // an SSML attribute, for engines that can only be steered through the
+      // request's speakingRate (see journeyMoodRate).
+      return { rate: finalRate + '%', pitch: pitchStr, rateFactor: finalRate / baseRate };
+    }
+
+    // Journey takes no SSML, so the per-paragraph mood above could never reach
+    // it: every paragraph of every story was synthesized at one identical
+    // rate, and the only variation a listener got was whatever the engine
+    // produced unprompted. speakingRate, though, is per REQUEST, and Journey
+    // is already one request per paragraph - so the mood scan can steer it
+    // there instead, giving a tense passage a heavier read and an action
+    // passage a quicker one. The swing is deliberately gentler than the SSML
+    // path's: rate is the only dimension available here, so it carries the
+    // contrast alone rather than sharing it with a pitch shift.
+    // Returns a multiplier on the base speaking rate, not a rate: the base is
+    // only settled further down, and a chunk is synthesized long after it is
+    // built, so the factor rides along on the chunk and is resolved per
+    // request (see chunkAudioConfig).
+    var JOURNEY_MOOD_SWING = 0.6; // fraction of the SSML path's rate offset
+    function journeyMoodFactor(para) {
+      var forced = null;
+      var mt = para.match(/^\[(tense|calm|happy|action)\]\s*/i);
+      if (mt) { forced = mt[1]; para = para.slice(mt[0].length); }
+      var factor = detectParagraphMood(para, forced).rateFactor;
+      return 1 + (factor - 1) * JOURNEY_MOOD_SWING;
     }
 
     // Theatrical emphasis (*word*) and wry, hushed parenthetical asides
@@ -2611,7 +2714,23 @@
         + '</speak>' };
     }
 
-    // Processes one paragraph's text for Journey voices (plain text with pause tricks)
+    // Processes one paragraph's text for Journey voices.
+    //
+    // Journey takes plain text only and derives its entire prosodic contour
+    // from punctuation, so the one thing this must never do is disturb a
+    // sentence's terminal mark. Every previous version did exactly that: it
+    // appended a run of dots after each full stop ("home." -> "home....."),
+    // a pair after every ? and !, and rewrote an em-dash as ",....". Journey
+    // reads a dot run as an ellipsis, and an ellipsis is a *suspension* - the
+    // voice trails off flat, quiet and unresolved, with the sentence left
+    // hanging. That is the opposite of the settled downward close a full stop
+    // gets, and it flattened the rise on every question. A long gap after a
+    // fading, unresolved clause is precisely why sentence ends were inaudible
+    // and the punctuation stopped reading as punctuation.
+    //
+    // The rule now: terminal marks are passed through untouched, and pacing
+    // comes from structure Journey already honours - one sentence per line
+    // inside a paragraph, and real stitched silence between paragraphs.
     function processJourneyText(para) {
       var s = para;
       // Journey can't shift pitch, so voice/mood tags are simply removed here
@@ -2633,39 +2752,53 @@
       s = s.replace(/U\.K\./g, 'U§K§');
       s = s.replace(/E\.U\./g, 'E§U§');
       s = s.replace(/U\.N\./g, 'U§N§');
-      // Pause markers are placed in a single pass using ¶ placeholders, then
-      // expanded once at the end. The old chained dot-replacements re-processed
-      // each other's output, so a plain sentence end ballooned into a 12-dot
-      // pause while an ellipsis got 6 — and quote-final punctuation
-      // (mountain.” / mountain.") got no pause at all. Pacing came out uneven.
-      s = s.replace(/(?:\.\.\.|…)([”"’']*)/g, '¶E$1'); // ellipsis - long trailing pause
-      s = s.replace(/(?:\u2014|--)/g,             '¶D');   // em-dash - hanging pause
-      s = s.replace(/;\s+/g,                      '¶D ');  // semicolon - mid pause
-      s = s.replace(/\.([”"’']*)(?=\s)/g,      '.$1¶P'); // sentence end (quote-aware)
-      s = s.replace(/([?!])([”"’']*)(?=\s)/g,   '$1$2¶Q');
-      s = s.replace(/,\s+/g, ',  ');
-      // Expand pause markers (nothing below re-processes these)
-      s = s.replace(/¶E/g, '......  ');
-      s = s.replace(/¶D/g, ',....  ');
-      s = s.replace(/¶P/g, '.....   ');
-      s = s.replace(/¶Q/g, '..   ');
+      // A real ellipsis stays a real ellipsis: where the author wrote one, a
+      // trailing-off suspension IS the intended reading, and Journey delivers
+      // it correctly unaided. Park it behind a placeholder so the sentence
+      // splitter below cannot mistake its dots for a sentence end.
+      s = s.replace(/(?:\.\.\.|\u2026)/g, '¶E');
+      // An em-dash is silent to Journey - it simply runs the two clauses
+      // together. A comma is the nearest mark it does honour, and unlike the
+      // old ",...." it leaves the clause's own contour intact.
+      s = s.replace(/\s*(?:\u2014|--)\s*/g, ', ');
+      // An interrupted line of dialogue ("But I—") leaves the comma stranded
+      // before the closing quote; tuck it back up against it.
+      s = s.replace(/,\s+(?=[\u201d"\u2019'](?:\s|$))/g, ',');
+      // Two dashes around an aside can leave a stray or doubled comma, which
+      // would otherwise be read as two separate breaths.
+      s = s.replace(/[ \t]+,/g, ',').replace(/,(?:[ \t]*,)+/g, ',').replace(/[ \t]{2,}/g, ' ');
+      // One sentence per line. The break goes AFTER the terminal mark and
+      // any closing quote, so each sentence keeps its own full-stop /
+      // question / exclamation contour and still gets a clean boundary
+      // before the next one starts - but only where a new sentence actually
+      // begins. A lowercase word after a closing quote is a dialogue
+      // attribution ("Who goes there?" rumbled the giant.), still one
+      // sentence, and breaking there would strand it as a phrase of its own.
+      // Semicolons and commas are left exactly as written; Journey already
+      // paces both correctly.
+      s = s.replace(/([.!?])([\u201d"\u2019']*)[ \t]+(?=[A-Z0-9\u00c0-\u00dd\u201c\u2018"'])/g, '$1$2\n');
+      s = s.replace(/¶E/g, '...');
+      // Trailing spaces and blank lines would read as stray empty phrases.
+      s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n');
       // Restore as spoken words — no period means Google's NLP won't pause mid-name
-      s = s.replace(/Mr§/g,   'Mister ');
-      s = s.replace(/Mrs§/g,  'Missus ');
-      s = s.replace(/Ms§/g,   'Miss ');
-      s = s.replace(/Dr§/g,   'Doctor ');
-      s = s.replace(/Prof§/g, 'Professor ');
-      s = s.replace(/St§/g,   'Saint ');
+      s = s.replace(/Mr§/g,   'Mister');
+      s = s.replace(/Mrs§/g,  'Missus');
+      s = s.replace(/Ms§/g,   'Miss');
+      s = s.replace(/Dr§/g,   'Doctor');
+      s = s.replace(/Prof§/g, 'Professor');
+      s = s.replace(/St§/g,   'Saint');
       s = s.replace(/U§S§/g, 'U.S.');
       s = s.replace(/U§K§/g, 'U.K.');
       s = s.replace(/E§U§/g, 'E.U.');
       s = s.replace(/U§N§/g, 'U.N.');
-      return s;
+      // A leading or trailing newline would be synthesized as an empty phrase.
+      return s.trim();
     }
 
     // One Journey chunk = one paragraph. Journey can't take SSML breaks, and
-    // in-text dot runs pause inconsistently, so paragraph pauses are stitched
-    // in as real silence between per-paragraph chunks instead.
+    // nothing that can be written into the text pauses reliably without also
+    // colouring how the surrounding words are read, so paragraph pauses are
+    // stitched in as real silence between per-paragraph chunks instead.
     function buildJourneyChunk(para) {
       return { type: 'text', value: processJourneyText(para) };
     }
@@ -2728,17 +2861,29 @@
       paraCount = paras.length;
       paras.forEach(function(p, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: 1300 });
+        // The mood is read from the whole paragraph before it is split, so
+        // every piece of it is spoken at one consistent pace - a rate change
+        // partway through a paragraph would be heard as a stumble.
+        var moodFactor = journeyMoodFactor(p.trim());
+        var emittedInPara = false;
         splitLongParagraph(p.trim()).forEach(function(piece) {
-          var segs = castVoice ? splitCastSegments(piece) : [{ text: piece, cast: false }];
-          segs.forEach(function(seg) {
+          splitJourneySegments(piece).forEach(function(seg) {
             if (!seg.text.trim()) return;
             var c = buildJourneyChunk(seg.text.trim());
             // A segment can be only tags (e.g. "[tense]" before a cast quote)
             // and end up empty once processed - never send an empty request
             if (!c.value.trim()) return;
             if (seg.cast) c.voice = castVoice;
+            // A cast quote is already set apart by being a different voice
+            // entirely; layering a rate shift on top would overplay it.
+            var dialogueRate = (seg.dialogue && !seg.cast)
+              ? (JOURNEY_DIALOGUE_RATE[seg.mood] || JOURNEY_DIALOGUE_RATE.neutral)
+              : 1;
+            c.rateFactor = moodFactor * dialogueRate;
             c.para = i; // paragraph index, for read-along highlighting timings
+            if (emittedInPara) chunks.push({ type: 'silence', durationMs: JOURNEY_SEAM_MS });
             chunks.push(c);
+            emittedInPara = true;
           });
         });
       });
@@ -2874,7 +3019,14 @@
     // Multipliers: storyteller-cadence tuning, +10% (read as too slow), then
     // -3% (the +10% overshot a touch). Synthesis always uses narrationBaseRate
     // (the language default); the user's speed slider is applied at playback.
-    var effectiveSpeechRate = isJourney ? narrationBaseRate * 0.832
+    //
+    // Journey was the outlier at 0.832 - a net 0.79x natural pace, well slower
+    // than every other engine here. Stretching speech that far spreads each
+    // sentence's pitch contour over more time, so the rate of pitch change
+    // drops and the inflection is heard as flat, which is the complaint this
+    // was tuned into. 0.926 puts it at ~0.88x, in line with Studio, and the
+    // speed slider still reaches the old pace for anyone who wants it.
+    var effectiveSpeechRate = isJourney ? narrationBaseRate * 0.926
                             : isStudio   ? narrationBaseRate * 0.918
                             : isChinese  ? narrationBaseRate * 1.088
                             : narrationBaseRate * 1.024;
@@ -2885,6 +3037,20 @@
       pitch: (isJourney || isStudio) ? 0.0 : -2.0,
       effectsProfileId: ['headphone-class-device']
     };
+
+    // A chunk carrying a rateFactor (Journey's per-paragraph mood - the only
+    // prosody lever that engine has) is synthesized at its own speaking rate.
+    // Everything else shares the one config object.
+    function chunkAudioConfig(chunk) {
+      if (!chunk || typeof chunk.rateFactor !== 'number' || chunk.rateFactor === 1) return audioConfig;
+      var rate = Math.min(1.4, Math.max(0.5, effectiveSpeechRate * chunk.rateFactor));
+      return {
+        audioEncoding:    audioConfig.audioEncoding,
+        speakingRate:     rate,
+        pitch:            audioConfig.pitch,
+        effectsProfileId: audioConfig.effectsProfileId
+      };
+    }
 
     // ── Fetch all chunks in parallel, report section-count progress ──
     var audioCtx = getSharedAudioCtx();
@@ -3056,12 +3222,13 @@
       // Full-cast segments override the narrator with a companion voice
       var vName = chunk.voice ? chunk.voice.id   : voiceId;
       var vLang = chunk.voice ? chunk.voice.lang : languageCode;
+      var cfg = chunkAudioConfig(chunk);
       var reqBody = {
         input: chunk.type === 'ssml' ? { ssml: chunk.value } : { text: chunk.value },
         voice: { languageCode: vLang, name: vName },
-        audioConfig: audioConfig
+        audioConfig: cfg
       };
-      var ckey = chunkCacheKey(chunk, vName, vLang, audioConfig.speakingRate);
+      var ckey = chunkCacheKey(chunk, vName, vLang, cfg.speakingRate);
       return withTimeout(
         fetch(TTS_URL, { method: 'POST', signal: signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) })
           .then(function(r) {
@@ -3083,7 +3250,7 @@
     function fetchChunkCachedOrOnce(chunk) {
       var vName = chunk.voice ? chunk.voice.id   : voiceId;
       var vLang = chunk.voice ? chunk.voice.lang : languageCode;
-      var ckey  = chunkCacheKey(chunk, vName, vLang, audioConfig.speakingRate);
+      var ckey  = chunkCacheKey(chunk, vName, vLang, chunkAudioConfig(chunk).speakingRate);
       return chunkCacheGet(ckey).then(function(b64) {
         if (b64) {
           return decodeB64Audio(b64).catch(function() {
@@ -3142,8 +3309,18 @@
       var totalLength = buffers.reduce(function(sum,  b){ return sum + b.length; }, 0);
       var combined    = audioCtx.createBuffer(numChannels, totalLength, ctxRate);
       // ~8ms fade at each buffer edge: butt-joining decoded chunks can cut a
-      // waveform mid-cycle, which is audible as a click at every stitch point
-      var fadeN = Math.round(ctxRate * 0.008);
+      // waveform mid-cycle, which is audible as a click at every stitch point.
+      // Against a generated-silence neighbour there is no such discontinuity
+      // to hide - the signal either side is already at zero - so those edges
+      // get a 2ms de-click instead. 8ms is long enough to soften the plosive
+      // that opens a paragraph, and since every paragraph now follows a
+      // silence chunk, the full fade was shaving the attack off the first
+      // word of each one.
+      var fadeN      = Math.round(ctxRate * 0.008);
+      var edgeFadeN  = Math.round(ctxRate * 0.002);
+      function isSilentAt(i) {
+        return i < 0 || i >= chunks.length || !chunks[i] || chunks[i].type === 'silence';
+      }
       // Paragraph timings for read-along highlighting: chunks carry their
       // paragraph index, and we know each buffer's exact position in the mix
       var timings = [];
@@ -3157,15 +3334,14 @@
           if (lastT && lastT.para === chunk.para) lastT.end = endS;
           else timings.push({ para: chunk.para, start: startS, end: endS });
         }
-        var n = Math.min(fadeN, Math.floor(buf.length / 4));
+        var cap  = Math.floor(buf.length / 4);
+        var inN  = Math.min(isSilentAt(bi - 1) ? edgeFadeN : fadeN, cap);
+        var outN = Math.min(isSilentAt(bi + 1) ? edgeFadeN : fadeN, cap);
         for (var ch = 0; ch < numChannels; ch++) {
           if (ch < buf.numberOfChannels) {
             var data = buf.getChannelData(ch);
-            for (var f = 0; f < n; f++) {
-              var g = f / n;
-              data[f] *= g;                        // fade in
-              data[buf.length - 1 - f] *= g;       // fade out
-            }
+            for (var f = 0; f < inN; f++)  data[f] *= f / inN;                     // fade in
+            for (var k = 0; k < outN; k++) data[buf.length - 1 - k] *= k / outN;   // fade out
             combined.getChannelData(ch).set(data, offset);
           }
           // channels absent in this buffer stay zero (silence)
