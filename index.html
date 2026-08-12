@@ -2132,7 +2132,7 @@
   // switches without hoarding audio the finished-narration cache already has.
   var CHUNK_CACHE_MAX = 500;
   var AUDIO_CACHE_VERSION = 2; // IndexedDB schema version (v2 added 'chunks')
-  var NARRATION_PIPELINE_V = 5; // bump to invalidate cached audio after pipeline changes
+  var NARRATION_PIPELINE_V = 6; // bump to invalidate cached audio after pipeline changes
 
   function openAudioCache() {
     return new Promise(function(resolve, reject) {
@@ -2340,12 +2340,17 @@
       s = s.replace(/([,;])(\u201d(?:<\/prosody>)?|&quot;)\s+/g, '$1$2<break time="250ms"/> ');
       // Full stop - definitive pause (Google applies natural downward inflection)
       s = s.replace(/\.\s+/g, '.<break time="600ms"/> ');
-      // Question mark - pitch-up prosody on the mark itself for genuine curiosity
-      s = s.replace(/\?\s+/g, '<prosody pitch="+2st">?</prosody><break time="400ms"/> ');
-      s = s.replace(/\?$/, '<prosody pitch="+2st">?</prosody>');
-      // Exclamation mark - rate-boost for energy and urgency
-      s = s.replace(/!\s+/g, '<prosody rate="108%">!</prosody><break time="380ms"/> ');
-      s = s.replace(/!$/, '<prosody rate="108%">!</prosody>');
+      // Question and exclamation marks are left bare, exactly like the full
+      // stop above. They used to be wrapped in a <prosody> span of their own
+      // ("<prosody pitch=\"+2st\">?</prosody>"), which was counterproductive:
+      // a prosody element is a prosodic boundary, so wrapping only the mark
+      // cut it off from the clause it belongs to, and the engine no longer
+      // applied the interrogative rise across the words leading up to it - it
+      // pitched up a silent character instead. Google already gives a bare ?
+      // its rising contour and a bare ! its extra energy, across the whole
+      // clause, which is what actually makes a question sound like one.
+      s = s.replace(/\?\s+/g, '?<break time="400ms"/> ');
+      s = s.replace(/!\s+/g, '!<break time="380ms"/> ');
       // Comma - short breath
       s = s.replace(/,\s+/g, ',<break time="250ms"/> ');
       // Semicolon - mid pause
@@ -2611,7 +2616,23 @@
         + '</speak>' };
     }
 
-    // Processes one paragraph's text for Journey voices (plain text with pause tricks)
+    // Processes one paragraph's text for Journey voices.
+    //
+    // Journey takes plain text only and derives its entire prosodic contour
+    // from punctuation, so the one thing this must never do is disturb a
+    // sentence's terminal mark. Every previous version did exactly that: it
+    // appended a run of dots after each full stop ("home." -> "home....."),
+    // a pair after every ? and !, and rewrote an em-dash as ",....". Journey
+    // reads a dot run as an ellipsis, and an ellipsis is a *suspension* - the
+    // voice trails off flat, quiet and unresolved, with the sentence left
+    // hanging. That is the opposite of the settled downward close a full stop
+    // gets, and it flattened the rise on every question. A long gap after a
+    // fading, unresolved clause is precisely why sentence ends were inaudible
+    // and the punctuation stopped reading as punctuation.
+    //
+    // The rule now: terminal marks are passed through untouched, and pacing
+    // comes from structure Journey already honours - one sentence per line
+    // inside a paragraph, and real stitched silence between paragraphs.
     function processJourneyText(para) {
       var s = para;
       // Journey can't shift pitch, so voice/mood tags are simply removed here
@@ -2633,39 +2654,53 @@
       s = s.replace(/U\.K\./g, 'U§K§');
       s = s.replace(/E\.U\./g, 'E§U§');
       s = s.replace(/U\.N\./g, 'U§N§');
-      // Pause markers are placed in a single pass using ¶ placeholders, then
-      // expanded once at the end. The old chained dot-replacements re-processed
-      // each other's output, so a plain sentence end ballooned into a 12-dot
-      // pause while an ellipsis got 6 — and quote-final punctuation
-      // (mountain.” / mountain.") got no pause at all. Pacing came out uneven.
-      s = s.replace(/(?:\.\.\.|…)([”"’']*)/g, '¶E$1'); // ellipsis - long trailing pause
-      s = s.replace(/(?:\u2014|--)/g,             '¶D');   // em-dash - hanging pause
-      s = s.replace(/;\s+/g,                      '¶D ');  // semicolon - mid pause
-      s = s.replace(/\.([”"’']*)(?=\s)/g,      '.$1¶P'); // sentence end (quote-aware)
-      s = s.replace(/([?!])([”"’']*)(?=\s)/g,   '$1$2¶Q');
-      s = s.replace(/,\s+/g, ',  ');
-      // Expand pause markers (nothing below re-processes these)
-      s = s.replace(/¶E/g, '......  ');
-      s = s.replace(/¶D/g, ',....  ');
-      s = s.replace(/¶P/g, '.....   ');
-      s = s.replace(/¶Q/g, '..   ');
+      // A real ellipsis stays a real ellipsis: where the author wrote one, a
+      // trailing-off suspension IS the intended reading, and Journey delivers
+      // it correctly unaided. Park it behind a placeholder so the sentence
+      // splitter below cannot mistake its dots for a sentence end.
+      s = s.replace(/(?:\.\.\.|\u2026)/g, '¶E');
+      // An em-dash is silent to Journey - it simply runs the two clauses
+      // together. A comma is the nearest mark it does honour, and unlike the
+      // old ",...." it leaves the clause's own contour intact.
+      s = s.replace(/\s*(?:\u2014|--)\s*/g, ', ');
+      // An interrupted line of dialogue ("But I—") leaves the comma stranded
+      // before the closing quote; tuck it back up against it.
+      s = s.replace(/,\s+(?=[\u201d"\u2019'](?:\s|$))/g, ',');
+      // Two dashes around an aside can leave a stray or doubled comma, which
+      // would otherwise be read as two separate breaths.
+      s = s.replace(/[ \t]+,/g, ',').replace(/,(?:[ \t]*,)+/g, ',').replace(/[ \t]{2,}/g, ' ');
+      // One sentence per line. The break goes AFTER the terminal mark and
+      // any closing quote, so each sentence keeps its own full-stop /
+      // question / exclamation contour and still gets a clean boundary
+      // before the next one starts - but only where a new sentence actually
+      // begins. A lowercase word after a closing quote is a dialogue
+      // attribution ("Who goes there?" rumbled the giant.), still one
+      // sentence, and breaking there would strand it as a phrase of its own.
+      // Semicolons and commas are left exactly as written; Journey already
+      // paces both correctly.
+      s = s.replace(/([.!?])([\u201d"\u2019']*)[ \t]+(?=[A-Z0-9\u00c0-\u00dd\u201c\u2018"'])/g, '$1$2\n');
+      s = s.replace(/¶E/g, '...');
+      // Trailing spaces and blank lines would read as stray empty phrases.
+      s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n');
       // Restore as spoken words — no period means Google's NLP won't pause mid-name
-      s = s.replace(/Mr§/g,   'Mister ');
-      s = s.replace(/Mrs§/g,  'Missus ');
-      s = s.replace(/Ms§/g,   'Miss ');
-      s = s.replace(/Dr§/g,   'Doctor ');
-      s = s.replace(/Prof§/g, 'Professor ');
-      s = s.replace(/St§/g,   'Saint ');
+      s = s.replace(/Mr§/g,   'Mister');
+      s = s.replace(/Mrs§/g,  'Missus');
+      s = s.replace(/Ms§/g,   'Miss');
+      s = s.replace(/Dr§/g,   'Doctor');
+      s = s.replace(/Prof§/g, 'Professor');
+      s = s.replace(/St§/g,   'Saint');
       s = s.replace(/U§S§/g, 'U.S.');
       s = s.replace(/U§K§/g, 'U.K.');
       s = s.replace(/E§U§/g, 'E.U.');
       s = s.replace(/U§N§/g, 'U.N.');
-      return s;
+      // A leading or trailing newline would be synthesized as an empty phrase.
+      return s.trim();
     }
 
     // One Journey chunk = one paragraph. Journey can't take SSML breaks, and
-    // in-text dot runs pause inconsistently, so paragraph pauses are stitched
-    // in as real silence between per-paragraph chunks instead.
+    // nothing that can be written into the text pauses reliably without also
+    // colouring how the surrounding words are read, so paragraph pauses are
+    // stitched in as real silence between per-paragraph chunks instead.
     function buildJourneyChunk(para) {
       return { type: 'text', value: processJourneyText(para) };
     }
@@ -3142,8 +3177,18 @@
       var totalLength = buffers.reduce(function(sum,  b){ return sum + b.length; }, 0);
       var combined    = audioCtx.createBuffer(numChannels, totalLength, ctxRate);
       // ~8ms fade at each buffer edge: butt-joining decoded chunks can cut a
-      // waveform mid-cycle, which is audible as a click at every stitch point
-      var fadeN = Math.round(ctxRate * 0.008);
+      // waveform mid-cycle, which is audible as a click at every stitch point.
+      // Against a generated-silence neighbour there is no such discontinuity
+      // to hide - the signal either side is already at zero - so those edges
+      // get a 2ms de-click instead. 8ms is long enough to soften the plosive
+      // that opens a paragraph, and since every paragraph now follows a
+      // silence chunk, the full fade was shaving the attack off the first
+      // word of each one.
+      var fadeN      = Math.round(ctxRate * 0.008);
+      var edgeFadeN  = Math.round(ctxRate * 0.002);
+      function isSilentAt(i) {
+        return i < 0 || i >= chunks.length || !chunks[i] || chunks[i].type === 'silence';
+      }
       // Paragraph timings for read-along highlighting: chunks carry their
       // paragraph index, and we know each buffer's exact position in the mix
       var timings = [];
@@ -3157,15 +3202,14 @@
           if (lastT && lastT.para === chunk.para) lastT.end = endS;
           else timings.push({ para: chunk.para, start: startS, end: endS });
         }
-        var n = Math.min(fadeN, Math.floor(buf.length / 4));
+        var cap  = Math.floor(buf.length / 4);
+        var inN  = Math.min(isSilentAt(bi - 1) ? edgeFadeN : fadeN, cap);
+        var outN = Math.min(isSilentAt(bi + 1) ? edgeFadeN : fadeN, cap);
         for (var ch = 0; ch < numChannels; ch++) {
           if (ch < buf.numberOfChannels) {
             var data = buf.getChannelData(ch);
-            for (var f = 0; f < n; f++) {
-              var g = f / n;
-              data[f] *= g;                        // fade in
-              data[buf.length - 1 - f] *= g;       // fade out
-            }
+            for (var f = 0; f < inN; f++)  data[f] *= f / inN;                     // fade in
+            for (var k = 0; k < outN; k++) data[buf.length - 1 - k] *= k / outN;   // fade out
             combined.getChannelData(ch).set(data, offset);
           }
           // channels absent in this buffer stay zero (silence)
