@@ -2547,7 +2547,32 @@
       var finalRate  = Math.min(115, Math.max(65, baseRate + rateOff));
       var finalPitch = basePitch + pitchOff;
       var pitchStr = finalPitch === 0 ? '0st' : (finalPitch > 0 ? '+' : '') + finalPitch.toFixed(1) + 'st';
-      return { rate: finalRate + '%', pitch: pitchStr };
+      // rateFactor is the same decision expressed as a multiplier rather than
+      // an SSML attribute, for engines that can only be steered through the
+      // request's speakingRate (see journeyMoodRate).
+      return { rate: finalRate + '%', pitch: pitchStr, rateFactor: finalRate / baseRate };
+    }
+
+    // Journey takes no SSML, so the per-paragraph mood above could never reach
+    // it: every paragraph of every story was synthesized at one identical
+    // rate, and the only variation a listener got was whatever the engine
+    // produced unprompted. speakingRate, though, is per REQUEST, and Journey
+    // is already one request per paragraph - so the mood scan can steer it
+    // there instead, giving a tense passage a heavier read and an action
+    // passage a quicker one. The swing is deliberately gentler than the SSML
+    // path's: rate is the only dimension available here, so it carries the
+    // contrast alone rather than sharing it with a pitch shift.
+    // Returns a multiplier on the base speaking rate, not a rate: the base is
+    // only settled further down, and a chunk is synthesized long after it is
+    // built, so the factor rides along on the chunk and is resolved per
+    // request (see chunkAudioConfig).
+    var JOURNEY_MOOD_SWING = 0.6; // fraction of the SSML path's rate offset
+    function journeyMoodFactor(para) {
+      var forced = null;
+      var mt = para.match(/^\[(tense|calm|happy|action)\]\s*/i);
+      if (mt) { forced = mt[1]; para = para.slice(mt[0].length); }
+      var factor = detectParagraphMood(para, forced).rateFactor;
+      return 1 + (factor - 1) * JOURNEY_MOOD_SWING;
     }
 
     // Theatrical emphasis (*word*) and wry, hushed parenthetical asides
@@ -2763,6 +2788,10 @@
       paraCount = paras.length;
       paras.forEach(function(p, i) {
         if (i > 0) chunks.push({ type: 'silence', durationMs: 1300 });
+        // The mood is read from the whole paragraph before it is split, so
+        // every piece of it is spoken at one consistent pace - a rate change
+        // partway through a paragraph would be heard as a stumble.
+        var moodFactor = journeyMoodFactor(p.trim());
         splitLongParagraph(p.trim()).forEach(function(piece) {
           var segs = castVoice ? splitCastSegments(piece) : [{ text: piece, cast: false }];
           segs.forEach(function(seg) {
@@ -2772,6 +2801,7 @@
             // and end up empty once processed - never send an empty request
             if (!c.value.trim()) return;
             if (seg.cast) c.voice = castVoice;
+            c.rateFactor = moodFactor;
             c.para = i; // paragraph index, for read-along highlighting timings
             chunks.push(c);
           });
@@ -2920,6 +2950,20 @@
       pitch: (isJourney || isStudio) ? 0.0 : -2.0,
       effectsProfileId: ['headphone-class-device']
     };
+
+    // A chunk carrying a rateFactor (Journey's per-paragraph mood - the only
+    // prosody lever that engine has) is synthesized at its own speaking rate.
+    // Everything else shares the one config object.
+    function chunkAudioConfig(chunk) {
+      if (!chunk || typeof chunk.rateFactor !== 'number' || chunk.rateFactor === 1) return audioConfig;
+      var rate = Math.min(1.4, Math.max(0.5, effectiveSpeechRate * chunk.rateFactor));
+      return {
+        audioEncoding:    audioConfig.audioEncoding,
+        speakingRate:     rate,
+        pitch:            audioConfig.pitch,
+        effectsProfileId: audioConfig.effectsProfileId
+      };
+    }
 
     // ── Fetch all chunks in parallel, report section-count progress ──
     var audioCtx = getSharedAudioCtx();
@@ -3091,12 +3135,13 @@
       // Full-cast segments override the narrator with a companion voice
       var vName = chunk.voice ? chunk.voice.id   : voiceId;
       var vLang = chunk.voice ? chunk.voice.lang : languageCode;
+      var cfg = chunkAudioConfig(chunk);
       var reqBody = {
         input: chunk.type === 'ssml' ? { ssml: chunk.value } : { text: chunk.value },
         voice: { languageCode: vLang, name: vName },
-        audioConfig: audioConfig
+        audioConfig: cfg
       };
-      var ckey = chunkCacheKey(chunk, vName, vLang, audioConfig.speakingRate);
+      var ckey = chunkCacheKey(chunk, vName, vLang, cfg.speakingRate);
       return withTimeout(
         fetch(TTS_URL, { method: 'POST', signal: signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) })
           .then(function(r) {
@@ -3118,7 +3163,7 @@
     function fetchChunkCachedOrOnce(chunk) {
       var vName = chunk.voice ? chunk.voice.id   : voiceId;
       var vLang = chunk.voice ? chunk.voice.lang : languageCode;
-      var ckey  = chunkCacheKey(chunk, vName, vLang, audioConfig.speakingRate);
+      var ckey  = chunkCacheKey(chunk, vName, vLang, chunkAudioConfig(chunk).speakingRate);
       return chunkCacheGet(ckey).then(function(b64) {
         if (b64) {
           return decodeB64Audio(b64).catch(function() {
