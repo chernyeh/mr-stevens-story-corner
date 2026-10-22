@@ -1557,7 +1557,7 @@
     // here than latency, and the fast model invents more freely. maxOut is
     // each model's real output ceiling.
     var model = (isPremiumStory() || discover)
-      ? { id: 'claude-sonnet-5',            maxOut: 128000 }
+      ? { id: 'claude-sonnet-5-5',          maxOut: 128000 }
       : { id: 'claude-haiku-4-5-20251001',  maxOut: 64000  };
 
     // Budget generously. max_tokens is a cap, not a reservation - billing is
@@ -1567,7 +1567,7 @@
     // targetWords * 2.5 + 1000 left room for none of them:
     //   - models overshoot the target word count, often by a lot;
     //   - Discover appends the <extras> block after the story;
-    //   - claude-sonnet-5 runs adaptive thinking whenever `thinking` is
+    //   - claude-sonnet-5-5 runs adaptive thinking whenever `thinking` is
     //     omitted, and thinking tokens count against max_tokens alongside the
     //     response text. That is what cut off a 10-minute Discover piece: the
     //     ~4k budget was largely spent thinking before the story was written.
@@ -1581,7 +1581,7 @@
       stream: true,
       messages: [{ role: 'user', content: prompt }]
     };
-    // claude-sonnet-5 thinks by default when `thinking` is omitted, and
+    // claude-sonnet-5-5 thinks by default when `thinking` is omitted, and
     // thinking streams as thinking_delta events this client ignores - so the
     // whole thinking phase is dead air with no words on screen. The serverless
     // proxy is capped at 60s (vercel.json), and on a 15-minute story that
@@ -1589,7 +1589,9 @@
     // before the first text token, leaving a blank story card. Storytelling
     // does not need the extra deliberation, and Discover's factual guardrails
     // are prompt-level, so turn it off and start writing immediately.
-    if (model.id === 'claude-sonnet-5') body.thinking = { type: 'disabled' };
+    // Sonnet 5.5 rejects { type: 'disabled' } with a 400; 'between_tools' is
+    // its thinking-off mode (no tools here, so it never thinks at all).
+    if (model.id === 'claude-sonnet-5-5') body.thinking = { type: 'between_tools' };
 
     fetch('/api/proxy', {
       method: 'POST',
@@ -1647,6 +1649,11 @@
             // - surface it so the reader can retry instead.
             if (stopReason === 'max_tokens' && !/<\/story>/.test(rawText)) {
               throw new Error('The story ran out of room before it finished. Try a shorter length or regenerate.');
+            }
+            // Sonnet 5.5's safety classifiers can occasionally decline a
+            // request mid-stream; say so rather than narrating a fragment.
+            if (stopReason === 'refusal') {
+              throw new Error('The story couldn\'t be written for this request. Try a different theme or regenerate.');
             }
             finaliseStream(rawText, voice, cfg, minutes, discover);
             return;
