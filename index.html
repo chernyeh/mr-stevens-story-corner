@@ -369,6 +369,14 @@
           </label>
           <span class="narration-mode-note" id="narrationModeNote" style="display:none;font-size:0.68rem;opacity:0.6"></span>
         </div>
+        <div class="player-setting-row" id="phononRow" style="display:none">
+          <span class="player-setting-label">💻 Mac voices</span>
+          <label class="fullcast-label" title="Adds Phonon voices that run in Ollama on this Mac — nothing is sent to the cloud">
+            <input type="checkbox" id="phononToggle" onchange="changePhonon()">
+            <span>Add Phonon voices from this Mac</span>
+          </label>
+          <span class="narration-mode-note" id="phononNote" style="display:none;font-size:0.68rem;opacity:0.6"></span>
+        </div>
         <div class="player-setting-row">
           <span class="player-setting-label">🎙️ Voice</span>
           <select class="live-voice-select" id="liveVoiceSelect"><option value="">Loading...</option></select>
@@ -413,6 +421,7 @@
   var selectedMode  = 'story'; // 'story' (fiction) | 'discover' (IB non-fiction)
   var speechRate    = 0.95;   // user speed preference (applied via playbackRate)
   var narrationBaseRate = 0.95; // rate the current audio was synthesized at
+  var narrationPace     = 1;    // extra playback factor for engines that can't synthesize slower (Phonon)
   var fullStoryText = '';
   var storyExtrasText = ''; // Discover sections / learner glossary - shown, and narrated after the finale
   var narrationTimings = null; // [{para, start, end}] for read-along highlighting
@@ -472,6 +481,175 @@
   var SPEECH_SUPPORTED   = !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
   function localModeActive() {
     return narrationMode === 'local' && SPEECH_SUPPORTED && localVoices.length > 0;
+  }
+
+  // ── PHONON VOICES (LOCAL, VIA OLLAMA) ────────────────────────────────────
+  // Optional English voices synthesized by Phonon running in Ollama on the
+  // user's own Mac. Off until ticked: probing localhost from every visitor's
+  // browser would put a local-network permission prompt on pupils' devices.
+  // Ollama only answers this site once its origin is in OLLAMA_ORIGINS.
+  var PHONON_URL       = 'http://localhost:11434';
+  var PHONON_KEY       = 'mrStevens_phonon';
+  var PHONON_ID_PREFIX = 'phonon:';
+  var PHONON_NARRATORS = [
+    { name: 'Delia',                 desc: 'Phonon US female',      lang: 'en-US' },
+    { name: 'Juniper',               desc: 'Phonon US female',      lang: 'en-US' },
+    { name: 'Zoey',                  desc: 'Phonon US female',      lang: 'en-US' },
+    { name: 'Russell',               desc: 'Phonon US male',        lang: 'en-US' },
+    { name: 'Freya',                 desc: 'Phonon British female', lang: 'en-GB' },
+    { name: 'Bryony',                desc: 'Phonon British female', lang: 'en-GB' },
+    { name: 'Toby',                  desc: 'Phonon British male',   lang: 'en-GB' },
+    { name: 'Hugh',                  desc: 'Phonon British male',   lang: 'en-GB' },
+    { name: 'Old Mortlake',          desc: 'Phonon character',      lang: 'en-GB' },
+    { name: 'Vyrmathrax the Ancient', desc: 'Phonon character',     lang: 'en-GB' }
+  ];
+  // Full-cast deep voice: the first of these Ollama has that isn't the narrator
+  var PHONON_CAST_LOW  = ['Grub the Ogre', 'Hugh', 'Easton'];
+  // Phonon only speaks at its natural pace, a touch quicker than the cloud
+  // voices' storytelling pace, so its playback is slowed to match
+  var PHONON_PACE      = 0.92;
+  var IS_MAC_DESKTOP   = /Macintosh/.test(navigator.userAgent) && !(navigator.maxTouchPoints > 1);
+  var phononStatus     = 'off'; // 'off' | 'checking' | 'ready' | 'error'
+  var phononError      = '';
+  var phononVoiceNames = {};    // normalised name -> Ollama's own spelling
+
+  function isPhononVoiceId(id) { return String(id || '').indexOf(PHONON_ID_PREFIX) === 0; }
+  // Ollama's voice names may use spaces, underscores, case or accents
+  // differently from Gradium's display names - compare letters and digits only
+  function phononNorm(name) {
+    return String(name).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+  function phononResolve(name) { return phononVoiceNames[phononNorm(name)] || null; }
+
+  function phononCastVoice(narratorId) {
+    for (var i = 0; i < PHONON_CAST_LOW.length; i++) {
+      var actual = phononResolve(PHONON_CAST_LOW[i]);
+      if (actual && PHONON_ID_PREFIX + actual !== narratorId) return { id: PHONON_ID_PREFIX + actual, lang: 'en-GB' };
+    }
+    return null;
+  }
+
+  // Raw PCM is requested because Ollama's streamed WAV header carries
+  // placeholder sizes; it is wrapped here into a proper WAV, base64-encoded
+  // so it caches and decodes exactly like Google's audioContent.
+  function pcm16ToWavB64(pcm, sampleRate) {
+    var n = pcm.byteLength - (pcm.byteLength % 2);
+    var buf = new ArrayBuffer(44 + n);
+    var v = new DataView(buf);
+    function str(o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+    str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVE');
+    str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
+    v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, 'data'); v.setUint32(40, n, true);
+    new Uint8Array(buf, 44).set(new Uint8Array(pcm, 0, n));
+    var bytes = new Uint8Array(buf), bin = '';
+    for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  function fetchPhononB64(text, voiceId, signal) {
+    return fetch(PHONON_URL + '/v1/audio/speech', {
+      method: 'POST',
+      signal: signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'phonon', voice: voiceId.slice(PHONON_ID_PREFIX.length), input: text, response_format: 'pcm' })
+    }).then(function(r) {
+      if (!r.ok) return r.text().then(function(t) { throw new Error('Phonon error ' + r.status + ': ' + t.substring(0, 200)); });
+      return r.arrayBuffer();
+    }).then(function(pcm) { return pcm16ToWavB64(pcm, 24000); });
+  }
+
+  function checkPhonon() {
+    phononStatus = 'checking';
+    syncPhononUI();
+    var ctrl  = new AbortController();
+    var timer = setTimeout(function() { ctrl.abort(); }, 4000);
+    return fetch(PHONON_URL + '/api/show', {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'phonon' })
+    }).then(function(r) {
+      if (r.status === 404) throw new Error('not_pulled');
+      if (!r.ok) throw new Error('http_' + r.status);
+      return r.json();
+    }).then(function(d) {
+      phononVoiceNames = {};
+      (d.voices || []).forEach(function(name) { phononVoiceNames[phononNorm(name)] = name; });
+      var found = PHONON_NARRATORS.filter(function(n) { return phononResolve(n.name); }).length;
+      phononStatus = found ? 'ready' : 'error';
+      phononError  = found ? '' : 'Phonon voices not found — update Ollama';
+    }).catch(function(err) {
+      phononStatus = 'error';
+      phononError  = err.message === 'not_pulled'
+        ? 'Phonon isn’t installed — run “ollama pull phonon”'
+        : 'Can’t reach Ollama on this Mac — is it open and set up for this site?';
+    }).then(function() {
+      clearTimeout(timer);
+      // Phonon voices only exist once Ollama has answered and only while this setting is still on
+      if (phononStatus !== 'off') syncPhononVoices();
+    });
+  }
+
+  // Adds (or removes) the shortlisted Phonon narrators at the end of the
+  // English voice list, keeping whatever voice was already selected.
+  function syncPhononVoices() {
+    var select = document.getElementById('liveVoiceSelect');
+    var keep   = select ? select.value : '';
+    VOICES.en = VOICES.en.filter(function(v) { return !v.phonon; });
+    if (phononStatus === 'ready') {
+      PHONON_NARRATORS.forEach(function(n) {
+        var actual = phononResolve(n.name);
+        if (actual) VOICES.en.push({ id: PHONON_ID_PREFIX + actual, label: n.name, desc: n.desc, lang: n.lang, phonon: true });
+      });
+    }
+    populateVoiceDropdowns();
+    if (select && keep) {
+      for (var i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === keep) { select.selectedIndex = i; break; }
+      }
+    }
+  }
+
+  function syncPhononUI() {
+    var row = document.getElementById('phononRow');
+    if (row) row.style.display = (IS_MAC_DESKTOP && selectedLang === 'en') ? 'flex' : 'none';
+    var t = document.getElementById('phononToggle');
+    if (t) t.checked = phononStatus !== 'off';
+    var note = document.getElementById('phononNote');
+    if (note) {
+      var msg = phononStatus === 'checking' ? 'Looking for Ollama…'
+              : phononStatus === 'error'    ? '⚠️ ' + phononError
+              : phononStatus === 'ready'    ? '✓ Added to the voice list — keep Ollama open'
+              : '';
+      note.textContent   = msg;
+      note.style.display = msg ? 'inline' : 'none';
+    }
+  }
+
+  function changePhonon() {
+    var t  = document.getElementById('phononToggle');
+    var on = !!(t && t.checked);
+    try { localStorage.setItem(PHONON_KEY, on ? '1' : '0'); } catch(e) {}
+    if (!on) {
+      phononStatus = 'off';
+      phononVoiceNames = {};
+      syncPhononVoices();
+      return;
+    }
+    // Phonon voices sit in the regular voice list, which the device-voice
+    // mode hides - switch that off so the new voices can be seen and picked
+    var lt = document.getElementById('localVoiceToggle');
+    if (narrationMode === 'local' && lt) { lt.checked = false; changeNarrationMode(); }
+    checkPhonon();
+  }
+
+  function restorePhononPref() {
+    var on = false;
+    try { on = localStorage.getItem(PHONON_KEY) === '1'; } catch(e) {}
+    if (on && IS_MAC_DESKTOP) checkPhonon();
+    else syncPhononUI();
   }
 
   // ── VOICES ────────────────────────────────────────────────────────────────
@@ -976,6 +1154,7 @@
   function populateVoiceDropdowns() {
     var select = document.getElementById('liveVoiceSelect');
     if (!select) return;
+    syncPhononUI(); // its row depends on the language
     select.innerHTML = '';
     if (localModeActive()) { populateLocalVoiceOptions(select); return; }
     var voices = VOICES[selectedLang] || VOICES.en;
@@ -989,6 +1168,7 @@
       if (vid.indexOf('journey') !== -1)  typeTag = ' · Journey';
       else if (vid.indexOf('neural2') !== -1) typeTag = ' · Neural2';
       else if (vid.indexOf('wavenet') !== -1) typeTag = ' · Wavenet';
+      else if (v.phonon) typeTag = ' · this Mac';
       opt.textContent = v.label + ' — ' + v.desc + typeTag;
       if (v.id === cfg.defaultVoice) opt.selected = true;
       select.appendChild(opt);
@@ -1171,7 +1351,7 @@
   // with pitch preservation - no re-synthesis, no extra TTS cost.
   function applyPlaybackSpeed() {
     if (!currentAudio) return;
-    var rate = speechRate / (narrationBaseRate || 0.95);
+    var rate = speechRate / (narrationBaseRate || 0.95) * narrationPace;
     if (rate < 0.5) rate = 0.5;
     if (rate > 2)   rate = 2;
     try {
@@ -2051,6 +2231,7 @@
     // Synthesize at the language's default rate; the user's speed preference
     // is applied afterwards as playbackRate (free, instant, cache-friendly)
     narrationBaseRate = (LANG_CONFIG[selectedLang] || LANG_CONFIG.en).defaultRate;
+    narrationPace     = isPhononVoiceId(voice.id) ? PHONON_PACE : 1;
 
     var lnr     = document.getElementById('loadNarrationRow');
     var pc      = document.getElementById('playerControls');
@@ -2282,7 +2463,9 @@
   function generateGoogleAudio(text, voiceId, languageCode, storyTitle, onProgress, signal) {
     var isChinese = (languageCode === 'cmn-CN');
     var isFrench  = (languageCode === 'fr-FR' || languageCode === 'fr-CA');
-    var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
+    // Phonon, like Journey, takes plain text only, so it shares the Journey path
+    var isPhonon  = isPhononVoiceId(voiceId);
+    var isJourney = isPhonon || voiceId.toLowerCase().indexOf('journey') !== -1;
     var isStudio  = voiceId.toLowerCase().indexOf('studio') !== -1;
 
     // Normalise straight double quotes to curly pairs so dialogue detection
@@ -2414,6 +2597,7 @@
     };
 
     function castLowVoice() {
+      if (isPhonon) return phononCastVoice(voiceId);
       var byLang = CAST_LOW_VOICES[(languageCode || 'en').slice(0, 2)];
       var engine = isJourney ? 'journey' : isStudio ? 'studio' : 'neural2';
       var v = byLang && byLang[engine];
@@ -3232,12 +3416,20 @@
       var vName = chunk.voice ? chunk.voice.id   : voiceId;
       var vLang = chunk.voice ? chunk.voice.lang : languageCode;
       var cfg = chunkAudioConfig(chunk);
+      var ckey = chunkCacheKey(chunk, vName, vLang, cfg.speakingRate);
+      if (isPhononVoiceId(vName)) {
+        return withTimeout(
+          fetchPhononB64(chunk.value, vName, signal).then(function(b64) {
+            chunkCachePut(ckey, b64);
+            return decodeB64Audio(b64);
+          }),
+          30000);
+      }
       var reqBody = {
         input: chunk.type === 'ssml' ? { ssml: chunk.value } : { text: chunk.value },
         voice: { languageCode: vLang, name: vName },
         audioConfig: cfg
       };
-      var ckey = chunkCacheKey(chunk, vName, vLang, cfg.speakingRate);
       return withTimeout(
         fetch(TTS_URL, { method: 'POST', signal: signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) })
           .then(function(r) {
@@ -3472,6 +3664,16 @@
     btn.disabled = true; btn.textContent = '⏳';
 
     var phrase = PREVIEW_PHRASES[selectedLang] || PREVIEW_PHRASES.en;
+    if (voice.phonon) {
+      var baseRate = (LANG_CONFIG[selectedLang] || LANG_CONFIG.en).defaultRate;
+      fetchPhononB64(phrase, voiceId)
+        .then(function(b64) { playPreviewAudio(btn, 'data:audio/wav;base64,' + b64, speechRate / baseRate * PHONON_PACE); })
+        .catch(function() {
+          previewAudio = null;
+          btn.disabled = false; btn.textContent = '▶ Preview';
+        });
+      return;
+    }
     var isJourney = voiceId.toLowerCase().indexOf('journey') !== -1;
     var isStudio  = voiceId.toLowerCase().indexOf('studio')  !== -1;
     var isChinese = voice.lang === 'cmn-CN';
@@ -3494,19 +3696,30 @@
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (!d.audioContent) throw new Error('No audio');
-      var audio = new Audio('data:audio/mp3;base64,' + d.audioContent);
-      previewAudio = audio;
-      audio.onended = audio.onerror = function() {
-        previewAudio = null;
-        btn.disabled = false; btn.textContent = '▶ Preview';
-      };
-      audio.play();
-      btn.textContent = '🔊 Playing';
+      playPreviewAudio(btn, 'data:audio/mp3;base64,' + d.audioContent, 1);
     })
     .catch(function() {
       previewAudio = null;
       btn.disabled = false; btn.textContent = '▶ Preview';
     });
+  }
+
+  function playPreviewAudio(btn, src, rate) {
+    var audio = new Audio(src);
+    previewAudio = audio;
+    if (rate !== 1) {
+      try {
+        audio.preservesPitch = true;
+        audio.webkitPreservesPitch = true;
+        audio.playbackRate = rate;
+      } catch (e) { /* older browsers: rate change still works, pitch may shift */ }
+    }
+    audio.onended = audio.onerror = function() {
+      previewAudio = null;
+      btn.disabled = false; btn.textContent = '▶ Preview';
+    };
+    audio.play();
+    btn.textContent = '🔊 Playing';
   }
 
   // ── FULL-CAST DIALOGUE (beta) ─────────────────────────────────────────────
@@ -3596,6 +3809,7 @@
       speechSynthesis.onvoiceschanged = getLocalVoices;
     }
     populateVoiceDropdowns();
+    restorePhononPref();
     updateSpeedSlider(0.95);
     restorePremiumPref();
     restoreFullCastPref();
